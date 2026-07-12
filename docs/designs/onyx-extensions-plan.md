@@ -100,6 +100,19 @@ Phases 1+3 should land together on one ABI bump if possible (both are small ctx 
 
 **Exit:** green baseline, fork remotes configured, one end-to-end manual run.
 
+> **STATUS: Phases 0, 1, 2 complete and merged to `onyx-extensions`.**
+> - Phase 1: `d3931e4` (feat/checkpoint) — `ctx.checkpoint({ key, message, data? })` via the
+>   strict-effect path; durable `checkpoint` event `{stableKey, attempt, message, data}`
+>   transactional with the completed row; ABI 12→13; RunProjection checkpoints +
+>   checkpointCount; goldens updated. Accepted deviation from this plan: explicit `key`
+>   in the spec object (keel-idiomatic stable identity) instead of `(message, data?)`.
+> - Phase 2: `a834129` (feat/mcp-server) — `keel mcp` stdio server, 12 tools, thin
+>   DaemonClient adapter, live-daemon tests, docs/mcp.md; adds @modelcontextprotocol/sdk +
+>   zod bump. `tail_checkpoints` = name-filter over durable events; payload shape verified
+>   to match Phase 1's real emission post-merge.
+> - Merge: `4256a28` (one trivial CHANGELOG both-add conflict).
+> - Next: Phase 3 (`ctx.drainSignals`), then Phase 4 workload test gates 5–7.
+
 ### Phase 0 status (recorded 2026-07-11)
 
 - Remotes configured: `origin` = zackleman/keel fork, `upstream` = kcosr/keel. Integration
@@ -126,6 +139,10 @@ Phases 1+3 should land together on one ABI bump if possible (both are small ctx 
   - durable diff + worktree cleanup > creating branch-backed worktree recovers a verified branch and stale worktree path
   - durable diff + worktree cleanup > creating branch-backed worktree recovery fails closed after stale provider acquisition
   - ctx.command > runs commands in a worktree workspace handle and releases the holder
+  - NOTE: this family is flaky in count (14–20 observed on the untouched base depending on
+    load; extra members: task review guidance workflows, ctx.agentSession, workspace setup
+    commands, trusted-local secrets side-channel). Verification rule refined: every failure
+    must be a macOS `/private/var` realpath mismatch in this family — anything else is new.
 - Quirks: Bun 1.3.14 sometimes crashes on exit (code 133) *after* printing complete results —
   judge runs by the printed pass/fail summary, not the exit code. Test counts inflate under
   heavy parallel load; run the suite alone when comparing against baseline.
