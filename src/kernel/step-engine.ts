@@ -114,12 +114,21 @@ export class StepEngine {
     return this.beginStrictEffect(key, inputs, version, deps, "checkpoint");
   }
 
+  beginDrainSignals(
+    key: string,
+    inputs: Json,
+    version: string,
+    deps: InputDep[] | null,
+  ): BeginResult {
+    return this.beginStrictEffect(key, inputs, version, deps, "drain_signals");
+  }
+
   private beginStrictEffect(
     key: string,
     inputs: Json,
     version: string,
     deps: InputDep[] | null,
-    effectType: "command" | "completion_check" | "checkpoint",
+    effectType: "command" | "completion_check" | "checkpoint" | "drain_signals",
   ): BeginResult {
     const inputHash = hashJson(inputs);
     const existing = this.store.getLatestAttempt(this.runId, key);
@@ -180,13 +189,63 @@ export class StepEngine {
     effectType: EffectType = "pure",
     events: Array<{ type: string; payload: Json }> = [],
   ): void {
+    this.commitStep(
+      key,
+      attempt,
+      version,
+      inputHash,
+      startedAtMs,
+      () => value,
+      deps,
+      effectType,
+      events,
+    );
+  }
+
+  /** Atomically consume the pending signal batch and commit it as this effect's result. */
+  completeDrainSignals(
+    key: string,
+    attempt: number,
+    version: string,
+    inputHash: string,
+    startedAtMs: number,
+    name: string,
+  ): unknown[] {
+    let batch: unknown[] = [];
+    this.commitStep(
+      key,
+      attempt,
+      version,
+      inputHash,
+      startedAtMs,
+      () => {
+        batch = this.store.drainSignals(this.runId, name, `${key}#${attempt}`);
+        return batch;
+      },
+      null,
+      "drain_signals",
+    );
+    return batch;
+  }
+
+  private commitStep(
+    key: string,
+    attempt: number,
+    version: string,
+    inputHash: string,
+    startedAtMs: number,
+    value: () => unknown,
+    deps: InputDep[] | null,
+    effectType: EffectType,
+    events: Array<{ type: string; payload: Json }> = [],
+  ): void {
     this.host.fault?.("before-commit", key);
     const existing = this.store.getJournalRow(this.runId, key, attempt);
-    const stored = prepareStepResult(value);
     // Artifact write + journal commit happen in ONE transaction, so a crash
     // leaves a committed row with its artifact present, or nothing — never a
-    // dangling reference (§8.2).
+    // dangling reference (§8.2). Signal drains also consume their queue here.
     this.store.transaction(() => {
+      const stored = prepareStepResult(value());
       if (stored.artifact) {
         this.store.putArtifact(stored.artifact.hash, stored.artifact.bytes, this.host.clock());
       }

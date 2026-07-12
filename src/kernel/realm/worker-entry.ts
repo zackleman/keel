@@ -40,6 +40,7 @@ import {
   type CompletionCheckResult,
   normalizeCompletionCheckEffectSpec,
 } from "../completion-check.ts";
+import { drainSignalsVersionIdentity, normalizeDrainSignals } from "../drain-signals.ts";
 import type { Schema } from "../schema.ts";
 import { closureOfHelpers, computeVersion } from "../version.ts";
 import {
@@ -763,6 +764,19 @@ const ctx = Object.freeze({
       checkpoint,
       version,
     });
+  },
+  async drainSignals<T>(key: unknown, name: unknown): Promise<T[]> {
+    const spec = normalizeDrainSignals(key, name);
+    assertNotReservedAuthorKey(spec.stableKey, "ctx.drainSignals");
+    const version = computeVersion({ spec: drainSignalsVersionIdentity() });
+    const reply = await rpc<{ batch: unknown[] }>({
+      type: "drain-signals",
+      key: spec.stableKey,
+      name: spec.name,
+      inputs: spec.identity,
+      version,
+    });
+    return reply.batch as T[];
   },
   agentSession(rawSessionSpec: {
     key: string;

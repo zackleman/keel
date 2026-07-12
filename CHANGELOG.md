@@ -76,6 +76,11 @@
   ([#22](https://github.com/kcosr/keel/pull/22))
 
 ### Added
+- Added `ctx.drainSignals<T>(key, name)` for non-parking, transactional FIFO
+  consumption of all currently pending signals. Completed drains replay their
+  recorded batch without re-consuming, and the supervised-worker guidance
+  composes conventional `steer` signals into the next agent-session turn.
+  This rides the unreleased workflow SDK ABI 13 and needs no schema migration.
 - Added `ctx.checkpoint({ key, message, data? })` for durable, strictly ordered
   workflow progress. Checkpoints journal through the strict-effect path, emit one
   replay-safe durable `checkpoint` event, appear in `RunProjection`, and raise

@@ -211,6 +211,7 @@ The prior-runtime defects that shaped Keel map to these requirements:
 | **Workspace setup** | `ctx.workspace({ setup })` — bounded host-side preparation commands attached to an explicit workspace. | Resolve/create the workspace, compute setup identity, mark setup pending, run setup commands sequentially, persist bounded command diagnostics, then mark the workspace ready. | Matching completed setup is reused for the same run-scoped workspace. Pending setup commands may run again after crash; failed setup fails later workspace resolution. | `workspace_setup` |
 | **Completion check effect** | `ctx.completionCheck(spec)` — host-side command/git gate for curated workflow completion. | Validate workspace row and check identity, write pending row, acquire the workspace holder, run the check, persist bounded result and events. | Matching completed checks replay. New completion attempts use new keys and observe current workspace/git/remote state. Pending identity mismatches fail closed. | `completion_check` |
 | **Checkpoint effect** | `ctx.checkpoint({ key, message, data? })` — durable, non-parking progress. | Write a strict pending row, then transactionally commit the payload result and one durable `checkpoint` event. | Matching completed checkpoints replay without another event. Matching pending checkpoints re-execute; pending identity mismatches fail closed. | `checkpoint` |
+| **Signal drain effect** | `ctx.drainSignals(key, name)` — non-parking FIFO batch consumption. | Write a strict pending row, then consume every currently pending signal of `name` in the same transaction as the completed batch result. | Matching completed drains replay the recorded batch without consuming later signals. Matching pending drains retry; pending identity mismatches fail closed. | `drain_signals` |
 | **Ambient** | `ctx.now()`, `ctx.random()`, `ctx.sleep()`. | Generate/record once. | Replay the recorded value (`sleep`: already-elapsed if the wake time passed). | `ambient` |
 
 Plain code *between* `ctx.*` calls (loops, `if`, dedupe logic) is not journaled.
@@ -659,6 +660,9 @@ interface Ctx {
   // Durable ordered progress; awaits journal + event persistence and never parks.
   checkpoint(spec: { key: string; message: string; data?: Json }): Promise<void>;
 
+  // Non-parking consumption of all currently pending signals under one name.
+  drainSignals<T = unknown>(key: string, name: string): Promise<T[]>;
+
   // Journaled non-determinism — the ONLY time/entropy in realm scope.
   now(): number;
   random(): number;
@@ -673,6 +677,7 @@ interface Ctx {
     : Promise<{ status: 'approved' | 'denied'; note: string | null; grantedCaps: unknown }>;
 
   // Durable wait for a named external event; Nth call consumes the Nth signal.
+  // Use a signal name with either signal or drainSignals, not both.
   signal<T = unknown>(name: string): Promise<T>;
 
   // Seal & restart an unbounded run with new input (atomic handoff + lineage).

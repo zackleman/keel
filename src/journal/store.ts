@@ -1985,11 +1985,27 @@ export class JournalStore {
         )
         .all(runId, cut);
       for (const o of orphans) this.decrementArtifactRefcount(o.result_artifact);
+      // Clear signals that were already pending at the rewind boundary before
+      // restoring the consumed batch owned by discarded drain results.
+      this.db.query("DELETE FROM signals WHERE run_id = ? AND consumed_key IS NULL").run(runId);
+      // A discarded drain result can no longer replay its batch, so return only
+      // the signals consumed by those discarded drain rows to the pending FIFO.
+      this.db
+        .query(
+          `UPDATE signals
+           SET consumed_key = NULL
+           WHERE run_id = ?
+             AND consumed_key IN (
+               SELECT stable_key || '#' || attempt
+               FROM journal
+               WHERE run_id = ? AND seq > ? AND effect_type = 'drain_signals'
+             )`,
+        )
+        .run(runId, runId, cut);
       this.db.query("DELETE FROM journal WHERE run_id = ? AND seq > ?").run(runId, cut);
       // clear unresolved waits — the run no longer parks where it did
       this.db.query("DELETE FROM timers WHERE run_id = ? AND fired = 0").run(runId);
       this.db.query("DELETE FROM approvals WHERE run_id = ? AND status = 'pending'").run(runId);
-      this.db.query("DELETE FROM signals WHERE run_id = ? AND consumed_key IS NULL").run(runId);
     });
   }
 
@@ -2250,6 +2266,22 @@ export class JournalStore {
       .query("UPDATE signals SET consumed_key = ? WHERE run_id = ? AND seq = ?")
       .run(consumedKey, runId, r.seq);
     return { payload: r.payload_ref ? JSON.parse(r.payload_ref) : null };
+  }
+
+  /** Consume every currently pending signal of `name` in FIFO delivery order. */
+  drainSignals(runId: string, name: string, consumedKey: string): unknown[] {
+    const rows = this.db
+      .query<{ payload_ref: string | null }, [string, string]>(
+        "SELECT payload_ref FROM signals WHERE run_id = ? AND name = ? AND consumed_key IS NULL ORDER BY seq ASC",
+      )
+      .all(runId, name);
+    if (rows.length === 0) return [];
+    this.db
+      .query(
+        "UPDATE signals SET consumed_key = ? WHERE run_id = ? AND name = ? AND consumed_key IS NULL",
+      )
+      .run(consumedKey, runId, name);
+    return rows.map((row) => (row.payload_ref ? JSON.parse(row.payload_ref) : null));
   }
 }
 

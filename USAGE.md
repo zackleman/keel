@@ -1669,9 +1669,21 @@ keel watch "$RUN" --output text
 ```
 
 Signals are ordered. The Nth `ctx.signal(name)` consumes the Nth delivered signal
-with that name. `signal` prints the acknowledgement status and exits after the
-payload is durable and any eligible wake has started; it does not watch resumed
-workflow progress.
+with that name. For between-turn steering, `await ctx.drainSignals<T>(key, name)`
+atomically consumes all currently pending payloads in delivery order and returns
+`[]` without parking when none are pending. Its completed journal result replays
+without consuming later arrivals; signal consumption and result completion commit
+in one transaction. A pending drain retries against the then-current queue after a
+crash. Use a given name with either `ctx.signal` or `ctx.drainSignals`, not both;
+both consume the same FIFO, but mixing the parking and non-parking APIs is
+confusing.
+
+Steer messages conventionally use `steer` (or `steer:<role>`) with payload
+`{ message, from?, atMs }`. Drain them before composing the next agent-session
+turn prompt. `signal` and MCP `send_signal` acknowledge durable delivery and
+eligible wake start, not that the worker observed the payload. A signal delivered
+during an agent turn is visible at the next turn boundary; use the next checkpoint
+to confirm uptake.
 
 ### Run Interruption
 

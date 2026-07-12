@@ -4,6 +4,7 @@ import {
   Flag,
   FolderCog,
   Globe,
+  Inbox,
   type LucideIcon,
   Terminal,
   Zap,
@@ -34,6 +35,7 @@ const EFFECT_ICON = {
   command: Terminal,
   completion_check: CircleCheck,
   checkpoint: Flag,
+  drain_signals: Inbox,
   workspace_setup: FolderCog,
   ambient: Globe,
 } satisfies Record<EffectType, LucideIcon>;

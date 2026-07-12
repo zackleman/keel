@@ -10,6 +10,7 @@ export type EffectType =
   | "command"
   | "completion_check"
   | "checkpoint"
+  | "drain_signals"
   | "workspace_setup"
   | "ambient";
 

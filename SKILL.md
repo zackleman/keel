@@ -75,7 +75,7 @@ The body runs in a sandbox. Stay inside it or the run is rejected:
 ```ts
 ctx.agent(spec)                       // call an LLM agent (the real work); see §4
 ctx.agentSession(spec).turn(spec)     // realm-only multi-turn logical agent; see §4.1
-ctx.command(spec)                     // durable bounded host command; see §4.2
+ctx.command(spec)                     // durable bounded host command; see §4.3
 ctx.completionCheck(spec)             // durable host completion gate for curated workflows
 ctx.checkpoint({ key, message, data? }) // durable, ordered progress; await persistence
 ctx.step(key, schema, inputs, fn)     // pure compute; memoized & re-run only if inputs/code change
@@ -83,6 +83,7 @@ ctx.now() / ctx.random()              // the only time / randomness allowed
 ctx.sleep(key, ms)                    // durable pause
 ctx.human({ key, prompt })            // wait for a human approval → { status, note }
 ctx.signal(name)                      // wait for an external signal
+ctx.drainSignals(key, name)           // consume all pending signals without parking
 ctx.stepKey(name, id)                 // make a stable key for fan-out
 ctx.log(msg) / ctx.phase(title)       // narration
 ```
@@ -183,7 +184,56 @@ resolved provider/model/selected-provider-config/tool/capability/workspace
 identity or changing a completed/pending turn's prompt/schema/options for the
 same turn key fails closed.
 
-## 4.2 Durable Commands (`ctx.command`)
+## 4.2 Supervised Worker Loop
+
+Use a durable agent session when a supervisor should steer work between turns.
+The conventional signal is `steer` (or `steer:<role>`) with payload
+`{ message, from?, atMs }`. Drain it before composing each turn so the steer
+content becomes part of that turn's durable prompt identity:
+
+```ts
+type Steer = { message: string; from?: string; atMs: number };
+
+const session = ctx.agentSession({ key: "worker", provider: "codex" });
+let done = false;
+let i = 0;
+let lastResult: TurnResult | null = null;
+
+while (!done) {
+  const steers = await ctx.drainSignals<Steer>(
+    ctx.stepKey("steer", String(i)),
+    "steer",
+  );
+  const turn = await session.turn({
+    // Session turn keys must match [A-Za-z0-9_-]+.
+    key: `turn_${i}`,
+    prompt: compose(taskPrompt, lastResult, steers),
+    schema: TurnResultSchema,
+  });
+  await ctx.checkpoint({
+    key: ctx.stepKey("checkpoint", String(i)),
+    message: turn.summary,
+    data: { iteration: i, steerCount: steers.length },
+  });
+  lastResult = turn;
+  done = turn.done;
+  i++;
+}
+```
+
+`drainSignals` never parks: it atomically consumes every signal currently
+pending under that name in delivery order and returns `[]` when none are
+pending. A completed drain replays its recorded batch without consuming later
+arrivals; a crash before completion leaves the batch pending for retry. Use a
+given signal name with either `ctx.signal` or `ctx.drainSignals`, not both.
+Both consume the same FIFO, but mixing parking and draining on one name is hard
+to reason about.
+
+Signal delivery acknowledges durable enqueue and wake-start handling, not worker
+uptake. A steer delivered during an agent turn is available at the next turn
+boundary; observe the next checkpoint to confirm uptake.
+
+## 4.3 Durable Commands (`ctx.command`)
 
 Use `ctx.command` for workflow-owned, bounded host-side commands whose output
 should affect later workflow logic or prompts: code maps, focused test

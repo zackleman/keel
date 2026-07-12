@@ -3549,6 +3549,30 @@ export class RealmKernel {
               reply(m.id, {});
               break;
             }
+            case "drain-signals": {
+              let begun: ReturnType<StepEngine["beginDrainSignals"]>;
+              try {
+                begun = engine.beginDrainSignals(m.key, m.inputs as Json, m.version, null);
+              } catch (err) {
+                replyError(m.id, err);
+                break;
+              }
+              if (begun.kind === "replay") {
+                reply(m.id, { batch: begun.value });
+                break;
+              }
+              this.onStepExecute?.(m.key);
+              const batch = engine.completeDrainSignals(
+                m.key,
+                begun.attempt,
+                m.version,
+                begun.inputHash,
+                begun.startedAtMs,
+                m.name,
+              );
+              reply(m.id, { batch });
+              break;
+            }
             case "command": {
               let workspace: CommandWorkspace;
               let invocationEnv: Record<string, string>;

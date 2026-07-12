@@ -61,6 +61,7 @@ import {
   completionCheckStartedEvent,
   normalizeCompletionCheckEffectSpec,
 } from "./completion-check.ts";
+import { drainSignalsVersionIdentity, normalizeDrainSignals } from "./drain-signals.ts";
 import { runBoundedProcess } from "./process-runner.ts";
 import type { Schema } from "./schema.ts";
 import { StepEngine, prepareStepResult } from "./step-engine.ts";
@@ -298,6 +299,9 @@ export interface Ctx {
   /** Journal a durable, strictly ordered progress update. */
   checkpoint(spec: CheckpointSpec): Promise<void>;
 
+  /** Atomically consume all currently pending signals of `name` without parking. */
+  drainSignals<T = unknown>(key: string, name: string): Promise<T[]>;
+
   /** Realm-only durable logical agent session. */
   agentSession(spec: AgentSessionSpec): AgentSession;
 
@@ -529,6 +533,23 @@ export class WorkflowCtx implements Ctx {
         },
       ],
     );
+  }
+
+  async drainSignals<T>(key: string, name: string): Promise<T[]> {
+    const spec = normalizeDrainSignals(key, name);
+    assertNotReservedAuthorKey(spec.stableKey, "ctx.drainSignals");
+    const version = computeVersion({ spec: drainSignalsVersionIdentity() });
+    const begun = this.engine.beginDrainSignals(spec.stableKey, spec.identity, version, null);
+    if (begun.kind === "replay") return begun.value as T[];
+
+    return this.engine.completeDrainSignals(
+      spec.stableKey,
+      begun.attempt,
+      version,
+      begun.inputHash,
+      begun.startedAtMs,
+      spec.name,
+    ) as T[];
   }
 
   async agent<T>(rawSpec: AgentSpec<T>): Promise<T> {

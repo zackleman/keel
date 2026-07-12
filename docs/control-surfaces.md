@@ -152,7 +152,7 @@ versions, systemd state, logs, and restart controls are not inferred.
 | rewind/fork | implemented | implemented | implemented | implemented | partial | deferred | not-applicable | `run:rewind`, `run:fork` |
 | rerun/source override | implemented | deferred | deferred | implemented | deferred | deferred | not-applicable | `run:retry` |
 | interrupt run | implemented | implemented | implemented | implemented | not-applicable | implemented | not-applicable | `run:interrupt` |
-| signal delivery | implemented | implemented | implemented | implemented | implemented | implemented | `ctx.signal` implemented | `run:signal` |
+| signal delivery | implemented | implemented | implemented | implemented | implemented | implemented | `ctx.signal` and non-parking `ctx.drainSignals` implemented | `run:signal` |
 | approval decision | implemented | implemented | implemented | implemented | implemented | implemented | `ctx.human` implemented | `admin` |
 | workflow command effect | existing run projection/events | watch text and NDJSON implemented | existing run report/output paths | visible through run events/projection | partial | deferred | `ctx.command` implemented | workflow launch authority plus normal run read/watch/output authority |
 | workflow completion checks | existing run projection/events/output | watch text and NDJSON implemented | existing run report/output paths | visible through run events/projection | partial | deferred | `ctx.completionCheck` implemented for curated workflows | workflow launch authority plus normal run read/watch/output authority |

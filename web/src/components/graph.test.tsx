@@ -9,6 +9,7 @@ const EFFECT_TYPE_FIXTURES = {
   command: true,
   completion_check: true,
   checkpoint: true,
+  drain_signals: true,
   workspace_setup: true,
   ambient: true,
 } satisfies Record<EffectType, true>;

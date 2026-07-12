@@ -128,6 +128,14 @@ export type WorkerRequest =
       version: string;
     }
   | {
+      type: "drain-signals";
+      id: number;
+      key: string;
+      name: string;
+      inputs: unknown;
+      version: string;
+    }
+  | {
       type: "step-commit";
       id: number;
       key: string;
