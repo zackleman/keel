@@ -100,6 +100,37 @@ Phases 1+3 should land together on one ABI bump if possible (both are small ctx 
 
 **Exit:** green baseline, fork remotes configured, one end-to-end manual run.
 
+### Phase 0 status (recorded 2026-07-11)
+
+- Remotes configured: `origin` = zackleman/keel fork, `upstream` = kcosr/keel. Integration
+  branch: `onyx-extensions` (pushed).
+- Baseline on macOS, Bun 1.3.14: `typecheck`, `lint`, `web:build` green.
+- `web:test`: **81/81 green under Node 22** (`~/.nvm/versions/node/v22.21.1`). Node 25 ships a
+  broken global `localStorage` that shadows jsdom's → 34 spurious failures. Run web tests as:
+  `PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH" node web/node_modules/vitest/vitest.mjs run --config vitest.config.ts` (from `web/`), or any Node ≤24.
+- `bun test`: 731+ pass; **14 known pre-existing failures**, all caused by the macOS
+  `/var → /private/var` tmpdir symlink (tests compare non-realpathed `mkdtempSync(tmpdir())`
+  paths against keel's realpathed cwd; upstream develops on Linux). Do NOT fix these as part
+  of feature phases. Verification rule for all agents: **no failures outside this list**:
+  - workflow definition snapshots > bundled module paths fall back to real runtime paths without accepting filesystem root
+  - keel CLI > workflow commands save, list, source, run, and update lifecycle
+  - keel CLI > workflow install task-review-guidance classifies created, unchanged, and conflicts
+  - WorkflowCtx workspaces > parallel in-process withWorkspace scopes do not bleed into each other
+  - trusted-local agent isolation controls > codex default read-only uses the intended workspace cwd
+  - trusted-local agent isolation controls > explicit direct workspace uses the supplied cwd and persists a direct row
+  - trusted-local agent isolation controls > withWorkspace works when destructured from ctx
+  - durable diff + worktree cleanup > parallel default direct workspace agents are permitted
+  - durable diff + worktree cleanup > copy workspace snapshots dirty files, excludes git metadata, and uses managed cwd
+  - durable diff + worktree cleanup > clone workspace uses explicit local repo and excludes dirty source files
+  - durable diff + worktree cleanup > branch-backed worktree uses default direct source and generated branch cwd
+  - durable diff + worktree cleanup > creating branch-backed worktree recovers a verified branch and stale worktree path
+  - durable diff + worktree cleanup > creating branch-backed worktree recovery fails closed after stale provider acquisition
+  - ctx.command > runs commands in a worktree workspace handle and releases the holder
+- Quirks: Bun 1.3.14 sometimes crashes on exit (code 133) *after* printing complete results —
+  judge runs by the printed pass/fail summary, not the exit code. Test counts inflate under
+  heavy parallel load; run the suite alone when comparing against baseline.
+- Deferred from Phase 0: manual daemon smoke run (will be covered by Phase 4's workload test).
+
 ---
 
 ## Phase 1 — `ctx.checkpoint`
