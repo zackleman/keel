@@ -80,6 +80,10 @@
   workflow progress. Checkpoints journal through the strict-effect path, emit one
   replay-safe durable `checkpoint` event, appear in `RunProjection`, and raise
   the workflow SDK ABI from 12 to 13 without a schema migration.
+- `keel mcp` now serves local stdio supervisor tools for bounded run listing,
+  canonical detail and blockage inspection, durable event/checkpoint paging,
+  saved-workflow launch, wait, signal, approval, interrupt, and resume actions.
+  It uses daemon RPC authorization and capability-token redaction throughout.
 - The web console now has opt-in browser diagnostics for run-event streaming
   and transcript coalescing via `localStorage.keelDebug`.
   ([#26](https://github.com/kcosr/keel/pull/26))

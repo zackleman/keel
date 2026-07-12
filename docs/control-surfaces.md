@@ -9,7 +9,7 @@ Keel exposes operator behavior through several surfaces:
 - `keel execute` control scripts;
 - TUI;
 - local web API and React UI;
-- planned MCP tools;
+- local supervisor MCP tools;
 - SDK/workflow authoring APIs when behavior is durable and replay-visible.
 
 The daemon RPC/API is the canonical operation boundary. CLI, execute, TUI, web,
@@ -93,8 +93,9 @@ Add TUI exposure when the operation belongs in an interactive terminal workflow
 and can reuse CLI/RPC contracts.
 
 Add MCP exposure when agents should inspect or operate on Keel state through
-structured tools rather than parsing CLI transcripts. MCP is planned and should
-usually be `deferred` or `not-applicable` at this baseline.
+structured tools rather than parsing CLI transcripts. The current MCP surface
+is a local stdio adapter over daemon RPC; new tools must remain bounded and use
+canonical projections rather than reading the journal directly.
 
 Track SDK/workflow API exposure only for workflow authoring or durable
 replay-visible behavior, such as new `ctx.*` methods, exported SDK names, or
@@ -144,15 +145,15 @@ versions, systemd state, logs, and restart controls are not inferred.
 | Operation | RPC | CLI | Execute | Web | TUI | MCP | SDK | Authority |
 |---|---|---|---|---|---|---|---|---|
 | run launch from captured source | implemented | implemented | implemented | implemented | not-applicable | deferred | not-applicable | open on local socket; admin on web; follow-up uses minted run capability |
-| run list | implemented | implemented | deferred | implemented | implemented | deferred | not-applicable | `admin` |
-| run get/report/output/blockage | implemented | implemented | implemented | implemented | implemented | deferred | not-applicable | `run:read`, `run:output` |
-| run watch/events/wait | implemented | implemented | implemented | implemented | partial | deferred | not-applicable | `run:watch`, `run:events` |
-| resume/retry | implemented | implemented | implemented | implemented | implemented | deferred | not-applicable | `run:resume`, `run:retry` |
+| run list | implemented | implemented | deferred | implemented | implemented | implemented | not-applicable | `admin` |
+| run get/report/output/blockage | implemented | implemented | implemented | implemented | implemented | partial | not-applicable | `run:read`, `run:output` |
+| run watch/events/wait | implemented | implemented | implemented | implemented | partial | implemented | not-applicable | `run:watch`, `run:events` |
+| resume/retry | implemented | implemented | implemented | implemented | implemented | partial | not-applicable | `run:resume`, `run:retry` |
 | rewind/fork | implemented | implemented | implemented | implemented | partial | deferred | not-applicable | `run:rewind`, `run:fork` |
 | rerun/source override | implemented | deferred | deferred | implemented | deferred | deferred | not-applicable | `run:retry` |
-| interrupt run | implemented | implemented | implemented | implemented | not-applicable | deferred | not-applicable | `run:interrupt` |
-| signal delivery | implemented | implemented | implemented | implemented | implemented | deferred | `ctx.signal` implemented | `run:signal` |
-| approval decision | implemented | implemented | implemented | implemented | implemented | deferred | `ctx.human` implemented | `admin` |
+| interrupt run | implemented | implemented | implemented | implemented | not-applicable | implemented | not-applicable | `run:interrupt` |
+| signal delivery | implemented | implemented | implemented | implemented | implemented | implemented | `ctx.signal` implemented | `run:signal` |
+| approval decision | implemented | implemented | implemented | implemented | implemented | implemented | `ctx.human` implemented | `admin` |
 | workflow command effect | existing run projection/events | watch text and NDJSON implemented | existing run report/output paths | visible through run events/projection | partial | deferred | `ctx.command` implemented | workflow launch authority plus normal run read/watch/output authority |
 | workflow completion checks | existing run projection/events/output | watch text and NDJSON implemented | existing run report/output paths | visible through run events/projection | partial | deferred | `ctx.completionCheck` implemented for curated workflows | workflow launch authority plus normal run read/watch/output authority |
 | workflow checkpoints | existing run projection/events | NDJSON implemented; dedicated text rendering deferred | existing run projection/event paths | visible through run events/projection | partial | deferred | `ctx.checkpoint` implemented | workflow launch authority plus normal run read/watch authority |
@@ -162,7 +163,7 @@ versions, systemd state, logs, and restart controls are not inferred.
 | schedule enable/disable/delete | implemented | deferred | deferred | implemented | not-applicable | deferred | not-applicable | `admin` |
 | saved workflow save/install | implemented | implemented | deferred | deferred | not-applicable | deferred | not-applicable | `admin`, `workflow:save` |
 | saved workflow list/show/source | implemented | implemented | deferred | implemented | not-applicable | deferred | not-applicable | `admin`, `workflow:read` |
-| saved workflow launch/run | implemented | implemented | deferred | implemented | not-applicable | deferred | not-applicable | `workflow:run`; follow-up uses minted run capability |
+| saved workflow launch/run | implemented | implemented | deferred | implemented | not-applicable | implemented | not-applicable | `workflow:run`; follow-up uses minted run capability |
 | saved workflow enable/disable/deprecate/delete | implemented | implemented | deferred | implemented | not-applicable | deferred | not-applicable | `admin`, `workflow:save` for scoped non-delete metadata |
 | workflow definition preview/source | implemented | implemented | deferred | deferred | not-applicable | deferred | not-applicable | `admin`, `run:source` depending selector |
 | workflow definition GC | implemented | implemented | deferred | deferred | not-applicable | deferred | not-applicable | `admin` |
