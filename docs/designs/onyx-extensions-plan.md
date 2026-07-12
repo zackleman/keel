@@ -118,7 +118,15 @@ Phases 1+3 should land together on one ABI bump if possible (both are small ctx 
 >   SKILL template. Stayed on ABI 13 (introduced by Phase 1 on this unreleased branch).
 >   Accepted deviation: SKILL template uses `turn_${i}` keys (agentSession turn keys
 >   reject `:` so `ctx.stepKey` output is invalid there).
-> - Next: Phase 4 workload test (gates 5–7).
+> - Phase 4: `5fb8cd7` (feat/workload-test) — autoresearch workload + full 6-item chaos
+>   matrix, ALL PASS with evidence in docs/designs/workload-test-results.md. No Phase 1–3
+>   bugs found. Key signals: Phase 5 state is ergonomics-only (replay already rebuilds loop
+>   state correctly); no evidence Tier-2 mid-turn injection is needed (Phase 7 stays
+>   optional/skip). Operational notes recorded: wait_for_run returns at sleep/human parks
+>   (supervisors poll watch_run); MCP launches saved workflows but doesn't save them;
+>   agentSession runs reject source-override reruns (keyed ctx.agent is the workload shape).
+> - **Gate passed — Phases 5–7 unblocked.** Next: Phase 5 design doc (review-gated before
+>   build), then Phase 8 before any remote exposure.
 
 ### Phase 0 status (recorded 2026-07-11)
 
