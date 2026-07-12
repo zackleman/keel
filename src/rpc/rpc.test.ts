@@ -709,7 +709,7 @@ describe("saved workflow RPC", () => {
         finishedAtMs: 1,
       });
 
-      const gc = await api.gcDefinitions({ ttlMs: 0 });
+      const gc = await api.gcDefinitions({ ttlMs: 0, runTtlMs: Number.MAX_SAFE_INTEGER });
       expect(gc.workflowDefinitionsRemoved).toBe(2);
       expect(() =>
         api.getWorkflowDefinitionSource({

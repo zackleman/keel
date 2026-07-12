@@ -128,12 +128,14 @@ export class SupervisorTools {
     approvalId: string,
     decision: "approved" | "denied",
     note?: string,
+    grantedCaps?: unknown,
   ): Promise<RunStart> {
     const { runId, stableKey } = decodeApprovalId(approvalId);
     return this.safe(
       await this.client.decideApproval(runId, stableKey, {
         status: decision,
         ...(note ? { note } : {}),
+        ...(grantedCaps !== undefined ? { grantedCaps } : {}),
       }),
     );
   }

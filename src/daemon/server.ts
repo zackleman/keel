@@ -11,7 +11,7 @@ import type { Socket } from "bun";
 import { AgentConcurrencyLimiter } from "../agents/concurrency.ts";
 import { SecretStore } from "../agents/secrets.ts";
 import type { AgentProviderRegistry } from "../agents/types.ts";
-import { ensureAdminCapability } from "../auth/capabilities.ts";
+import { ensureAdminCapability, ensureSubmitterCapability } from "../auth/capabilities.ts";
 import { JournalStore } from "../journal/store.ts";
 import {
   DEFAULT_HEARTBEAT_MS,
@@ -21,6 +21,7 @@ import {
 import { RealmKernel } from "../kernel/realm/realm-host.ts";
 import { failRunWithError } from "../kernel/run-errors.ts";
 import { Supervisor } from "../kernel/supervisor.ts";
+import { UNTRUSTED_DEFAULT_CEILING_PROFILE } from "../policy/launch-authority.ts";
 import { EventHub } from "../rpc/event-hub.ts";
 import { InProcessKeel } from "../rpc/in-process.ts";
 import { effectiveOperationalSettings } from "../settings/catalog.ts";
@@ -50,6 +51,9 @@ export interface DaemonOptions {
   superviseMs?: number;
   /** Optional bootstrap admin bearer token. Stored only as a daemon-side hash. */
   adminToken?: string;
+  /** Optional bootstrap submitter token, restricted by a named launch ceiling. */
+  submitterToken?: string;
+  submitterCeilingProfile?: string;
   /** Keel-owned store for retained isolated session workspaces. */
   workspaceStore?: string;
   /** Named agent profiles, resolved into each ctx.agent before versioning. */
@@ -182,6 +186,14 @@ export class KeelDaemon {
     this.store = JournalStore.open(opts.dbPath);
     if (opts.adminToken) {
       ensureAdminCapability(this.store, opts.adminToken, this.clock());
+    }
+    if (opts.submitterToken) {
+      ensureSubmitterCapability(
+        this.store,
+        opts.submitterToken,
+        opts.submitterCeilingProfile ?? UNTRUSTED_DEFAULT_CEILING_PROFILE,
+        this.clock(),
+      );
     }
     const operational = effectiveOperationalSettings(this.store.listDaemonSettingRows());
     const agentConcurrency = new AgentConcurrencyLimiter(

@@ -24,6 +24,7 @@ export type CapabilityAction =
   | "workflow:read"
   | "workflow:run"
   | "workflow:save"
+  | "workflow:submit"
   | "admin";
 
 export interface AuthorizationRequest {
@@ -79,6 +80,7 @@ export function issueRunCapability(
     atMs,
     expiresAtMs: opts.expiresAtMs ?? null,
     note: opts.note ?? `run ${runId}`,
+    ceilingProfile: null,
   });
 }
 
@@ -94,6 +96,28 @@ export function ensureAdminCapability(store: JournalStore, token: string, atMs: 
     expiresAtMs: null,
     revokedAtMs: null,
     note: "daemon admin bootstrap",
+    ceilingProfile: null,
+  });
+}
+
+export function ensureSubmitterCapability(
+  store: JournalStore,
+  token: string,
+  ceilingProfile: string,
+  atMs: number,
+): void {
+  const secretHash = hashCapabilityToken(token);
+  if (store.getCapabilityByHash(secretHash)) return;
+  store.putCapability({
+    id: `cap_submitter_${shortHash(token)}`,
+    secretHash,
+    resourceJson: canonicalJson({ kind: "daemon" } satisfies CapabilityResource),
+    actionsJson: canonicalJson(["workflow:submit"] satisfies CapabilityAction[]),
+    createdAtMs: atMs,
+    expiresAtMs: null,
+    revokedAtMs: null,
+    note: `submitter ceiling ${ceilingProfile}`,
+    ceilingProfile,
   });
 }
 
@@ -138,6 +162,7 @@ function putCapability(
     atMs: number;
     expiresAtMs: number | null;
     note: string | null;
+    ceilingProfile: string | null;
   },
 ): { capabilityId: string; token: string } {
   const token = `${input.prefix}_${randomBytes(32).toString("base64url")}`;
@@ -151,6 +176,7 @@ function putCapability(
     expiresAtMs: input.expiresAtMs,
     revokedAtMs: null,
     note: input.note,
+    ceilingProfile: input.ceilingProfile,
   });
   return { capabilityId, token };
 }

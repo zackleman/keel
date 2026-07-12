@@ -51,6 +51,8 @@ export class DaemonClient {
   private socket: Socket<undefined> | null = null;
   private buf = "";
   private nextId = 1;
+  private readonly encoder = new TextEncoder();
+  private readonly writeQueue: Array<{ data: Uint8Array; offset: number }> = [];
   private readonly pending = new Map<
     number,
     { resolve: (v: unknown) => void; reject: (e: unknown) => void }
@@ -66,6 +68,7 @@ export class DaemonClient {
       unix: socketPath,
       socket: {
         data: (_s, data) => c.onData(data),
+        drain: () => c.flushWrites(),
         close: () => c.failAll(new Error("daemon connection closed")),
       },
     });
@@ -75,6 +78,7 @@ export class DaemonClient {
   close(): void {
     const socket = this.socket;
     this.socket = null;
+    this.writeQueue.length = 0;
     this.failAll(new Error("daemon client closed"));
     socket?.end();
     const force = socket as
@@ -142,8 +146,29 @@ export class DaemonClient {
     return new Promise<T>((resolve, reject) => {
       const id = this.nextId++;
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
-      this.socket?.write(`${JSON.stringify({ id, method, params })}\n`);
+      this.writeQueue.push({
+        data: this.encoder.encode(`${JSON.stringify({ id, method, params })}\n`),
+        offset: 0,
+      });
+      this.flushWrites();
     });
+  }
+
+  private flushWrites(): void {
+    const socket = this.socket;
+    if (!socket) return;
+    while (this.writeQueue.length > 0) {
+      const next = this.writeQueue[0];
+      if (!next) return;
+      const written = socket.write(next.data, next.offset, next.data.byteLength - next.offset);
+      if (written < 0) {
+        this.close();
+        return;
+      }
+      if (written === 0) return;
+      next.offset += written;
+      if (next.offset >= next.data.byteLength) this.writeQueue.shift();
+    }
   }
 
   browseDirectories(req: BrowseDirectoriesRequest): Promise<BrowseDirectoriesResult> {
@@ -371,7 +396,8 @@ export class DaemonClient {
   }): Promise<{ ok: boolean; diagnostics: SettingsDiagnostic[] }> {
     return this.rpc("checkSetting", req);
   }
-  gcDefinitions(req: { ttlMs?: number; cacheMinAgeMs?: number } = {}): Promise<{
+  gcDefinitions(req: { ttlMs?: number; runTtlMs?: number; cacheMinAgeMs?: number } = {}): Promise<{
+    oneOffRunsRemoved: number;
     workflowDefinitionsRemoved: number;
     definitionCacheEntriesRemoved: number;
   }> {

@@ -16,6 +16,7 @@ import type {
   SavedWorkflowVersionView,
   SavedWorkflowView,
 } from "../journal/store.ts";
+import type { LaunchAuthority } from "../policy/launch-authority.ts";
 import type { SettingClass, SettingView, SettingsDiagnostic } from "../settings/catalog.ts";
 import type { WorkflowSourceInput } from "../workflow-definitions/source.ts";
 import type {
@@ -59,6 +60,8 @@ export interface LaunchRequest {
   provenance?: WorkflowProvenance;
   /** Trusted-local secret values for this run. Keel never persists these values. */
   runSecrets?: RunSecrets;
+  /** Daemon-resolved launch authority; wire callers cannot select this value. */
+  launchAuthority?: LaunchAuthority | null;
 }
 
 export interface SaveWorkflowRequest {
@@ -75,6 +78,8 @@ export interface SaveWorkflowRequest {
   metadata?: unknown;
   version?: number;
   allowDuplicateDefinition?: boolean;
+  /** Approved ctx.human gate on the reviewed one-off definition. */
+  reviewApproval?: { runId: string; key: string };
 }
 
 export interface PreviewWorkflowDefinitionRequest {
@@ -97,6 +102,8 @@ export interface LaunchSavedWorkflowRequest {
   target?: string;
   name?: string | null;
   runSecrets?: RunSecrets;
+  /** Daemon-resolved launch authority; wire callers cannot select this value. */
+  launchAuthority?: LaunchAuthority | null;
 }
 
 export interface SavedWorkflowSourceView {
@@ -390,7 +397,8 @@ export interface KeelApi {
   /** Return a run's terminal output without subscribing to events. */
   getRunOutput(runId: string): Promise<RunOutcome>;
   /** Prune unreferenced workflow definition rows and cache entries. */
-  gcDefinitions(opts?: { ttlMs?: number; cacheMinAgeMs?: number }): Promise<{
+  gcDefinitions(opts?: { ttlMs?: number; runTtlMs?: number; cacheMinAgeMs?: number }): Promise<{
+    oneOffRunsRemoved: number;
     workflowDefinitionsRemoved: number;
     definitionCacheEntriesRemoved: number;
   }>;

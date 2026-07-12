@@ -22,6 +22,7 @@ import type { JournalStore } from "../journal/store.ts";
 import type { AgentProfileCatalogRow, AgentWorkspaceRow, RunStatus } from "../journal/types.ts";
 import { ownerStaleWindowMs } from "../kernel/liveness.ts";
 import type { RealmKernel, RunHandle } from "../kernel/realm/realm-host.ts";
+import { DEFAULT_ONE_OFF_RUN_TTL_MS } from "../policy/launch-authority.ts";
 import {
   assertValidSettingWrite,
   canonicalSettingValueJson,
@@ -169,7 +170,11 @@ export class InProcessKeel implements KeelApi {
         provenance: req.provenance,
       },
       req.input,
-      { target, ...(req.runSecrets !== undefined ? { runSecrets: req.runSecrets } : {}) },
+      {
+        target,
+        ...(req.runSecrets !== undefined ? { runSecrets: req.runSecrets } : {}),
+        ...(req.launchAuthority !== undefined ? { launchAuthority: req.launchAuthority } : {}),
+      },
     );
     this.running.set(
       runId,
@@ -310,6 +315,7 @@ export class InProcessKeel implements KeelApi {
       workflowRef: `saved:${saved.name}@${saved.version} ${saved.definitionHash}`,
       target,
       ...(req.runSecrets !== undefined ? { runSecrets: req.runSecrets } : {}),
+      ...(req.launchAuthority !== undefined ? { launchAuthority: req.launchAuthority } : {}),
     });
     this.running.set(
       runId,
@@ -913,12 +919,19 @@ export class InProcessKeel implements KeelApi {
     };
   }
 
-  async gcDefinitions(opts: { ttlMs?: number; cacheMinAgeMs?: number } = {}): Promise<{
+  async gcDefinitions(
+    opts: { ttlMs?: number; runTtlMs?: number; cacheMinAgeMs?: number } = {},
+  ): Promise<{
+    oneOffRunsRemoved: number;
     workflowDefinitionsRemoved: number;
     definitionCacheEntriesRemoved: number;
   }> {
     const nowMs = Date.now();
     const operational = effectiveOperationalSettings(this.store.listDaemonSettingRows());
+    const oneOffRunsRemoved = this.store.pruneOneOffRuns({
+      nowMs,
+      ttlMs: opts.runTtlMs ?? DEFAULT_ONE_OFF_RUN_TTL_MS,
+    });
     const workflowDefinitionsRemoved = this.store.pruneWorkflowDefinitions({
       nowMs,
       ttlMs: opts.ttlMs ?? operational.workflowDefinitionGcTtlMs,
@@ -927,7 +940,7 @@ export class InProcessKeel implements KeelApi {
       nowMs,
       minAgeMs: opts.cacheMinAgeMs ?? 0,
     });
-    return { workflowDefinitionsRemoved, definitionCacheEntriesRemoved };
+    return { oneOffRunsRemoved, workflowDefinitionsRemoved, definitionCacheEntriesRemoved };
   }
 
   subscribeEvents(

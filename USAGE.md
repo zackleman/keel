@@ -860,10 +860,14 @@ Credential channels:
 | `KEEL_RUN_CAP` | Raw run bearer capability for one run. |
 | `KEEL_CAP_FILE` | JSON cap file containing a `capability` field. |
 | `KEEL_ADMIN_TOKEN` | Admin capability bootstrap/use channel. |
+| `KEEL_SUBMITTER_TOKEN` | Submitter bootstrap/use channel; one-off launches snapshot the `untrusted-default` capability ceiling. |
 | `KEEL_CAP_DIR` | Directory where new cap files are written; files are mode `0600`, directory mode `0700`. |
 
 Start the daemon with `KEEL_ADMIN_TOKEN=kc_admin_...` to bootstrap that token as
-an admin capability. Admin is required for daemon-wide `list` and
+an admin capability. Set `KEEL_SUBMITTER_TOKEN=kc_submitter_...` on the daemon and
+submitting clients to use the restrictive launch tier. Submitter declarations above the
+named ceiling fail with structured `capability_ceiling_exceeded` errors; they are never
+silently downgraded. Admin is required for daemon-wide `list` and
 `approve`/`deny` of `ctx.human` gates. Raw run capabilities are printed only
 with explicit `--emit-capability`; avoid this in transcripts unless you intend
 to handle the token as a secret.
@@ -2027,9 +2031,20 @@ add broad fallback branches for old schema shapes.
 `store.gcArtifacts()` reclaims content-addressed blobs no journal row references.
 Refcounts are recomputed from the journal, so GC self-heals after rewind/fork.
 
+### Reviewed workflow promotion
+
+`keel workflow save <name> <workflow.ts> --review-run <runId> --review-key <key>` requires
+an approved `ctx.human` gate from the one-off review run. The captured source must hash to
+the exact definition executed by that run. This binds explicit review to the immutable
+`name@version` definition hash. MCP `decide_approval` accepts optional `grantedCaps`; an
+approved grant expands only that run's snapshotted ceiling and is persisted with the
+approval.
+
 ### Workflow Definition GC
 
-`keel gc` asks the daemon to prune old unreferenced workflow definition rows and
+`keel gc` first removes terminal one-off run archives older than seven days by default;
+saved-workflow runs and archives with retained workspaces are exempt. It then asks the
+daemon to prune old unreferenced workflow definition rows and
 evict rebuildable materialized cache directories. It requires admin authority.
 Rows are kept when any run references their `definition_version` or any enabled
 schedule references their pinned hash. Cache directories are not evicted while a

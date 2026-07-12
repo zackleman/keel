@@ -206,7 +206,7 @@ function insertOldWorkflowDefinition(
 }
 
 describe("schema migrations", () => {
-  test("a copied v22 journal migrates to v23 with the state table", () => {
+  test("a copied v22 journal migrates through v24 with the state table", () => {
     const dir = mkdtempSync(join(tmpdir(), "keel-mig-v23-state-"));
     try {
       const sourcePath = join(dir, "source.db");
@@ -225,7 +225,7 @@ describe("schema migrations", () => {
             "SELECT value FROM schema_meta WHERE key = 'schema_version'",
           )
           .get()?.value,
-      ).toBe("23");
+      ).toBe("24");
       store.putStateRow({
         runId: "run",
         namespace: "research",
@@ -1474,6 +1474,52 @@ describe("workspace setup migration", () => {
         .all()
         .map((col) => col.name);
       expect(cols).toEqual(expect.arrayContaining(["setup_status", "setup_identity_hash"]));
+      store.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("launch-authority migration", () => {
+  test("v23 databases gain run snapshots and submitter ceiling profiles", () => {
+    const dir = mkdtempSync(join(tmpdir(), "keel-migrate-launch-authority-"));
+    const dbPath = join(dir, "journal.sqlite");
+    const db = new Database(dbPath, { create: true });
+    db.exec(`
+      CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      INSERT INTO schema_meta (key, value) VALUES ('schema_version', '23');
+      CREATE TABLE runs (
+        run_id TEXT PRIMARY KEY, workflow_name TEXT, definition_version TEXT NOT NULL,
+        workflow_ref TEXT, run_target TEXT, status TEXT NOT NULL, parent_run_id TEXT,
+        tenant_id TEXT, input_ref TEXT, output_ref TEXT, error_json TEXT,
+        heartbeat_at_ms INTEGER, runtime_owner_id TEXT, created_at_ms INTEGER NOT NULL,
+        finished_at_ms INTEGER
+      );
+      CREATE TABLE capabilities (
+        id TEXT PRIMARY KEY, secret_hash TEXT NOT NULL UNIQUE, resource_json TEXT NOT NULL,
+        actions_json TEXT NOT NULL, created_at_ms INTEGER NOT NULL, expires_at_ms INTEGER,
+        revoked_at_ms INTEGER, note TEXT
+      );
+    `);
+    db.close();
+    try {
+      const store = JournalStore.open(dbPath);
+      const runColumns = store.db
+        .query<{ name: string }, []>("PRAGMA table_info(runs)")
+        .all()
+        .map((column) => column.name);
+      const capabilityColumns = store.db
+        .query<{ name: string }, []>("PRAGMA table_info(capabilities)")
+        .all()
+        .map((column) => column.name);
+      expect(runColumns).toContain("launch_authority_json");
+      expect(capabilityColumns).toContain("ceiling_profile");
+      expect(
+        store.db
+          .query<{ value: string }, [string]>("SELECT value FROM schema_meta WHERE key = ?")
+          .get("schema_version")?.value,
+      ).toBe("24");
       store.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });

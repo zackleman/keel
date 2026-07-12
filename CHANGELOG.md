@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Changed
+- Added submitter credentials with named launch-authority ceilings, launch-time over-ask
+  rejection, run-scoped approval grants through MCP, review-gated immutable workflow
+  promotion, seven-day one-off archive retention, schema v24, and the remote deployment
+  hardening recipe. Trusted local/admin launches remain unrestricted.
 - Added durable child workflows with journaled `ctx.spawn`/`ctx.waitRun`,
   definition pinning, crash-safe child ID reservation, child run lineage, scoped
   child capabilities, and MCP `list_runs.children_of` filtering. The workflow

@@ -8,6 +8,13 @@ import {
 import { redactCapabilityTokensInValue } from "../auth/redaction.ts";
 import type { JournalStore } from "../journal/store.ts";
 import { failRunWithError } from "../kernel/run-errors.ts";
+import {
+  CapabilityCeilingError,
+  DEFAULT_ONE_OFF_RUN_TTL_MS,
+  type LaunchAuthority,
+  authorityForCeilingProfile,
+  preflightSubmissionSource,
+} from "../policy/launch-authority.ts";
 import type {
   EventCursor,
   EventEnvelope,
@@ -66,6 +73,11 @@ export type GatewayErrorEnvelope =
       message: string;
       action: string;
       resource: unknown;
+    }
+  | {
+      code: string;
+      message: string;
+      details?: unknown;
     }
   | {
       message: string;
@@ -135,7 +147,9 @@ export class KeelOperationGateway {
     launchRun: {
       kind: "core",
       webRequiresAdmin: true,
-      handle: async (_session, p) => {
+      handle: async (_session, p, credential) => {
+        const launchAuthority = this.launchAuthorityForCredential(credential);
+        preflightSubmissionSource(p.source as WorkflowSourceInput, launchAuthority);
         const target = requireRunTarget(p.target, "launchRun");
         const res = await this.opts.api.launchRun({
           source: p.source as WorkflowSourceInput,
@@ -144,6 +158,7 @@ export class KeelOperationGateway {
           name: (p.name as string | null | undefined) ?? null,
           provenance: p.provenance as WorkflowProvenance | undefined,
           runSecrets: p.runSecrets as Record<string, string> | undefined,
+          launchAuthority,
         });
         this.opts.claimLaunchedRun(res.runId);
         const cap = issueRunCapability(this.opts.store, res.runId, this.opts.clock());
@@ -155,6 +170,7 @@ export class KeelOperationGateway {
       handle: (_session, p, credential) => {
         const name = p.name as string;
         this.authorizeWorkflow(credential, name, p.version as number | undefined, "workflow:save");
+        this.assertPromotionReviewed(p as unknown as SaveWorkflowRequest);
         return this.opts.api.saveWorkflow(p as unknown as SaveWorkflowRequest);
       },
     },
@@ -213,14 +229,19 @@ export class KeelOperationGateway {
       kind: "core",
       handle: async (_session, p, credential) => {
         const ref = (p.ref ?? {}) as SavedWorkflowRef;
-        this.authorizeWorkflow(
-          credential,
-          ref.name,
-          typeof ref.version === "number" ? ref.version : undefined,
-          "workflow:run",
-        );
+        const launchAuthority = this.launchAuthorityForCredential(credential, true);
+        if (!launchAuthority) {
+          this.authorizeWorkflow(
+            credential,
+            ref.name,
+            typeof ref.version === "number" ? ref.version : undefined,
+            "workflow:run",
+          );
+        }
         const saved = this.opts.store.resolveSavedWorkflowRef(ref);
-        this.authorizeWorkflow(credential, ref.name, saved.version, "workflow:run");
+        if (!launchAuthority) {
+          this.authorizeWorkflow(credential, ref.name, saved.version, "workflow:run");
+        }
         const target = (p.target as string | undefined) ?? saved.defaultTarget ?? undefined;
         const res = await this.opts.api.launchSavedWorkflow({
           ref,
@@ -228,6 +249,7 @@ export class KeelOperationGateway {
           target,
           name: (p.name as string | null | undefined) ?? null,
           runSecrets: p.runSecrets as Record<string, string> | undefined,
+          launchAuthority,
         });
         this.opts.claimLaunchedRun(res.runId);
         const cap = issueRunCapability(this.opts.store, res.runId, this.opts.clock());
@@ -676,8 +698,13 @@ export class KeelOperationGateway {
           typeof p.cacheMinAgeMs === "number"
             ? p.cacheMinAgeMs
             : DEFAULT_DEFINITION_CACHE_MIN_AGE_MS;
+        const nowMs = this.opts.clock();
+        const oneOffRunsRemoved = this.opts.store.pruneOneOffRuns({
+          nowMs,
+          ttlMs: typeof p.runTtlMs === "number" ? p.runTtlMs : DEFAULT_ONE_OFF_RUN_TTL_MS,
+        });
         const workflowDefinitionsRemoved = this.opts.store.pruneWorkflowDefinitions({
-          nowMs: this.opts.clock(),
+          nowMs,
           ttlMs,
         });
         const definitionCacheEntriesRemoved = evictWorkflowDefinitionCache(this.opts.store, {
@@ -685,7 +712,7 @@ export class KeelOperationGateway {
           nowMs: this.opts.clock(),
           minAgeMs: cacheMinAgeMs,
         });
-        return { workflowDefinitionsRemoved, definitionCacheEntriesRemoved };
+        return { oneOffRunsRemoved, workflowDefinitionsRemoved, definitionCacheEntriesRemoved };
       },
     },
     ping: {
@@ -717,6 +744,19 @@ export class KeelOperationGateway {
   }
 
   private errorEnvelope(err: unknown): GatewayErrorEnvelope {
+    if (err instanceof CapabilityCeilingError) {
+      return {
+        code: err.code,
+        message: err.message,
+        details: {
+          profile: err.profile,
+          context: err.context,
+          declared: err.declared,
+          ceiling: err.ceiling,
+          exceeded: err.exceeded,
+        },
+      };
+    }
     if (err instanceof AuthorizationError) {
       return {
         code: err.code,
@@ -728,6 +768,59 @@ export class KeelOperationGateway {
     return {
       message: redactCapabilityTokensInValue(err instanceof Error ? err.message : String(err)),
     };
+  }
+
+  private launchAuthorityForCredential(
+    credential: string | null,
+    allowWorkflowCredential = false,
+  ): LaunchAuthority | null {
+    if (credential === null || this.isAdminAuthorized(credential)) return null;
+    try {
+      const capability = authorize(
+        this.opts.store,
+        credential,
+        { action: "workflow:submit", resource: { kind: "daemon" } },
+        this.opts.clock(),
+      );
+      if (!capability.ceilingProfile) {
+        throw new Error("submitter credential has no launch-authority ceiling profile");
+      }
+      return authorityForCeilingProfile(capability.ceilingProfile);
+    } catch (err) {
+      if (allowWorkflowCredential && err instanceof AuthorizationError) return null;
+      throw err;
+    }
+  }
+
+  private assertPromotionReviewed(req: SaveWorkflowRequest): void {
+    const oneOffRuns = this.opts.store
+      .listRuns()
+      .filter((run) => !run.workflowRef?.startsWith("saved:"));
+    if (oneOffRuns.length === 0) return;
+
+    const snapshot = snapshotWorkflowSource(this.opts.store, req.source, {
+      name: req.workflowName ?? req.name,
+      nowMs: this.opts.clock(),
+      cacheRoot: this.opts.definitionCacheRoot,
+    }).snapshot;
+    const hasOneOffRun = oneOffRuns.some((run) => run.definitionVersion === snapshot.hash);
+    if (!hasOneOffRun) return;
+
+    const review = req.reviewApproval;
+    if (!review) {
+      throw new Error("promoting a one-off workflow requires reviewApproval { runId, key }");
+    }
+    const run = this.opts.store.getRun(review.runId);
+    if (!run) throw new Error(`review run ${review.runId} not found`);
+    const approval = this.opts.store.getApproval(review.runId, review.key);
+    if (!approval || approval.status !== "approved") {
+      throw new Error(`promotion review ${review.runId}/${review.key} is not approved`);
+    }
+    if (snapshot.hash !== run.definitionVersion) {
+      throw new Error(
+        `promotion source ${snapshot.hash} does not match reviewed definition ${run.definitionVersion}`,
+      );
+    }
   }
 
   private authorizeRunCredential(

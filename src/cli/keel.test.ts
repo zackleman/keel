@@ -1450,6 +1450,7 @@ describe("keel CLI", () => {
         expect(JSON.parse(out.stdout)).toEqual({
           workflowDefinitionsRemoved: 0,
           definitionCacheEntriesRemoved: 0,
+          oneOffRunsRemoved: 0,
         });
       } finally {
         daemon.stop();

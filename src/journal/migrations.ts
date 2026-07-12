@@ -21,7 +21,8 @@
 // → v20 saved workflow registry tables
 // → v21 normalize legacy workflow definition source manifests
 // → v22 workspace setup metadata
-// → v23 run-scoped materialized state.
+// → v23 run-scoped materialized state
+// → v24 launch-authority ceiling snapshots and submitter credential profiles.
 
 import type { Database } from "bun:sqlite";
 import { parse } from "acorn";
@@ -375,6 +376,10 @@ export function applyMigration(db: Database, fromVersion: number): void {
         updated_at_ms  INTEGER NOT NULL,
         PRIMARY KEY (run_id, namespace, name)
       )`);
+      break;
+    case 23: // → v24: launch-authority policy is snapshotted per run.
+      addColumn(db, "runs", "launch_authority_json", "TEXT");
+      addColumn(db, "capabilities", "ceiling_profile", "TEXT");
       break;
     default:
       throw new Error(`no migration defined from schema version ${fromVersion}`);

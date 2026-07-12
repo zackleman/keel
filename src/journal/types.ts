@@ -47,12 +47,17 @@ export interface RunRow {
   errorJson: string | null;
   heartbeatAtMs: number | null;
   runtimeOwnerId: string | null;
+  /** Launch-time snapshot of the submitter's workflow capability ceiling. */
+  launchAuthorityJson: string | null;
   createdAtMs: number;
   finishedAtMs: number | null;
 }
 
-export type NewRunRow = Omit<RunRow, "finishedAtMs" | "workflowRef" | "runTarget"> &
-  Partial<Pick<RunRow, "finishedAtMs" | "workflowRef" | "runTarget">>;
+export type NewRunRow = Omit<
+  RunRow,
+  "finishedAtMs" | "workflowRef" | "runTarget" | "launchAuthorityJson"
+> &
+  Partial<Pick<RunRow, "finishedAtMs" | "workflowRef" | "runTarget" | "launchAuthorityJson">>;
 
 /** A dependency edge: a prior step output this row's inputHash incorporated. */
 export interface InputDep {
@@ -303,9 +308,13 @@ export interface CapabilityRow {
   expiresAtMs: number | null;
   revokedAtMs: number | null;
   note: string | null;
+  /** Named workflow capability ceiling for submitter credentials. */
+  ceilingProfile: string | null;
 }
 
-export type NewCapabilityRow = CapabilityRow;
+export type NewCapabilityRow = Omit<CapabilityRow, "ceilingProfile"> & {
+  ceilingProfile?: string | null;
+};
 
 export type AgentProfileSource = "catalog" | "programmatic";
 

@@ -71,8 +71,12 @@ Postgres-dialect discipline).
   an atomic transactional handoff with lineage, and fork is fenced to terminal
   runs. The OS-sandbox capability backstop remains the one unimplemented
   hardening.
-- **Run authorization is object-capability based.** Launch is open to local
-  callers and mints a run capability. Existing-run read/control operations
+- **Run authorization is object-capability based.** Trusted local launch remains open and
+  mints a run capability. Submitter bearer credentials carry a named workflow-capability
+  ceiling; the daemon snapshots it into the run, rejects static over-asks before creating
+  the run, and rechecks every agent/command boundary. Approved `ctx.human` grants expand
+  only that run's snapshot. Spawned children copy the parent's current snapshot, so later
+  parent escalation cannot broaden an existing child. Existing-run read/control operations
   require a run capability or an admin capability; the daemon stores only token
   hashes. The CLI writes cap files by default and raw tokens require explicit
   opt-in.
@@ -96,7 +100,7 @@ Postgres-dialect discipline).
 - The bundled daemon constructs the trusted-local in-memory `SecretStore`.
   Clients can supply run secret values on launch/retry/rewind/rerun; workflows
   request those names through `environment.secrets`. The CLI also wires
-  capability credentials (`KEEL_ADMIN_TOKEN`, `KEEL_RUN_CAP`, `KEEL_CAP_FILE`)
+  capability credentials (`KEEL_ADMIN_TOKEN`, `KEEL_SUBMITTER_TOKEN`, `KEEL_RUN_CAP`, `KEEL_CAP_FILE`)
   and the retained workspace store (`KEEL_WORKSPACE_STORE`).
 
 ---

@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { Capabilities } from "../../agents/capabilities.ts";
 import type { AgentConcurrencyLimiter } from "../../agents/concurrency.ts";
 import {
   type NormalizedAgentEnvironment,
@@ -45,6 +46,12 @@ import type {
   RunRow,
   RunStatus,
 } from "../../journal/types.ts";
+import {
+  type LaunchAuthority,
+  assertCapabilitiesWithinAuthority,
+  grantCapabilities,
+  parseLaunchAuthority,
+} from "../../policy/launch-authority.ts";
 import type { WorkflowProvenance } from "../../rpc/contract.ts";
 import {
   captureWorkflowVisibleSettingsSnapshot,
@@ -466,6 +473,21 @@ export class RealmKernel {
     return workflowVisibleSettingsFromSnapshot(runId, this.store.listRunSettingSnapshots(runId));
   }
 
+  private launchAuthorityForRun(runId: string): LaunchAuthority | null {
+    const run = this.store.getRun(runId);
+    if (!run) throw new Error(`run ${runId} not found`);
+    return parseLaunchAuthority(run.launchAuthorityJson);
+  }
+
+  private assertRunCapabilities(runId: string, caps: Capabilities, context: string): Capabilities {
+    return assertCapabilitiesWithinAuthority(caps, this.launchAuthorityForRun(runId), context);
+  }
+
+  private grantRunCapabilities(runId: string, grantedCaps: unknown): void {
+    const authority = grantCapabilities(this.launchAuthorityForRun(runId), grantedCaps);
+    if (authority) this.store.updateRun(runId, { launchAuthorityJson: canonicalJson(authority) });
+  }
+
   private assertRunSecretStoreAvailable(runSecrets: Record<string, string>, path: string): void {
     if (Object.keys(runSecrets).length > 0 && !this.secrets) {
       throw new Error(`${path} requires a RealmKernel SecretStore`);
@@ -517,6 +539,7 @@ export class RealmKernel {
       name?: string | null;
       target?: string | null;
       runSecrets?: Record<string, string>;
+      launchAuthority?: LaunchAuthority | null;
     } = {},
   ): { runId: string; done: Promise<RunHandle<O>> } {
     const at = this.host.clock();
@@ -550,6 +573,7 @@ export class RealmKernel {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: meta.launchAuthority ? canonicalJson(meta.launchAuthority) : null,
         createdAtMs: at,
       });
       this.store.replaceRunProfileSnapshot(runId, profileSnapshot, profileSnapshot.rows);
@@ -585,6 +609,7 @@ export class RealmKernel {
       workflowRef?: string | null;
       target?: string | null;
       runSecrets?: Record<string, string>;
+      launchAuthority?: LaunchAuthority | null;
     } = {},
   ): { runId: string; done: Promise<RunHandle<O>> } {
     const target = requireRunTarget(meta.target, "RealmKernel.launchDefinition");
@@ -617,6 +642,7 @@ export class RealmKernel {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: meta.launchAuthority ? canonicalJson(meta.launchAuthority) : null,
         createdAtMs: at,
       });
       this.store.replaceRunProfileSnapshot(runId, profileSnapshot, profileSnapshot.rows);
@@ -3133,7 +3159,24 @@ export class RealmKernel {
               }
               // §11: an explicitly isolated agent edits in a git worktree;
               // secrets are injected as invocation env from the side channel.
-              const caps = m.capabilities ?? undefined;
+              let caps: Capabilities | undefined;
+              try {
+                caps = m.capabilities
+                  ? this.assertRunCapabilities(runId, m.capabilities, `ctx.agent("${m.key}")`)
+                  : undefined;
+              } catch (err) {
+                engine.failStep(
+                  m.key,
+                  begun.attempt,
+                  m.version,
+                  begun.inputHash,
+                  begun.startedAtMs,
+                  err,
+                  "effectful",
+                );
+                reply(m.id, { ok: false, error: serializeError(err) });
+                break;
+              }
               let invocationEnv: Record<string, string> | undefined;
               try {
                 invocationEnv = this.resolveAgentEnvironmentEnv(runId, m.environment);
@@ -3400,7 +3443,20 @@ export class RealmKernel {
                 sessionRunGuarded = true;
               }
               this.onStepExecute?.(m.stableKey);
-              const caps = m.capabilities ?? undefined;
+              let caps: Capabilities | undefined;
+              try {
+                caps = m.capabilities
+                  ? this.assertRunCapabilities(
+                      runId,
+                      m.capabilities,
+                      `ctx.agentSession("${m.agentKey}")`,
+                    )
+                  : undefined;
+              } catch (err) {
+                this.failAgentSessionTurn(runId, m, begun, err);
+                reply(m.id, { ok: false, error: serializeError(err) });
+                break;
+              }
               const settings = requireWorkflowSettings();
 
               void (async () => {
@@ -3737,6 +3793,7 @@ export class RealmKernel {
                     errorJson: null,
                     heartbeatAtMs: null,
                     runtimeOwnerId: null,
+                    launchAuthorityJson: this.store.getRun(runId)?.launchAuthorityJson ?? null,
                     createdAtMs: at,
                   });
                   this.store.copyRunProfileSnapshot(runId, reservation.runId);
@@ -3835,6 +3892,11 @@ export class RealmKernel {
               let workspace: CommandWorkspace;
               let invocationEnv: Record<string, string>;
               try {
+                this.assertRunCapabilities(
+                  runId,
+                  m.command.capabilities,
+                  `ctx.command("${m.command.stableKey}")`,
+                );
                 workspace = this.resolveCommandWorkspaceCwd(runId, m.command);
                 invocationEnv = this.resolveCommandEnvironmentEnv(runId, m.command);
               } catch (err) {
@@ -3983,6 +4045,16 @@ export class RealmKernel {
               break;
             }
             case "completion-check": {
+              try {
+                this.assertRunCapabilities(
+                  runId,
+                  { fs: "workspace-write", shell: true, network: ["*"], secrets: [] },
+                  `completionCheck("${m.completionCheck.stableKey}")`,
+                );
+              } catch (err) {
+                reply(m.id, { ok: false, error: serializeError(err) });
+                break;
+              }
               let begun: ReturnType<StepEngine["beginCompletionCheck"]>;
               try {
                 begun = engine.beginCompletionCheck(
@@ -4103,6 +4175,9 @@ export class RealmKernel {
                 );
                 const appr = this.store.getApproval(runId, m.key);
                 if (appr && appr.status !== "pending") {
+                  if (appr.status === "approved" && appr.grantedCaps != null) {
+                    this.grantRunCapabilities(runId, appr.grantedCaps);
+                  }
                   reply(m.id, {
                     ready: true,
                     value: { status: appr.status, note: appr.note, grantedCaps: appr.grantedCaps },

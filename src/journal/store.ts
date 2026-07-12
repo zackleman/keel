@@ -184,11 +184,11 @@ export class JournalStore {
         `INSERT INTO runs (
            run_id, workflow_name, definition_version, workflow_ref, run_target, status, parent_run_id,
            tenant_id, input_ref, output_ref, error_json, heartbeat_at_ms,
-           runtime_owner_id, created_at_ms, finished_at_ms
+           runtime_owner_id, launch_authority_json, created_at_ms, finished_at_ms
          ) VALUES (
            $runId, $workflowName, $definitionVersion, $workflowRef, $runTarget, $status, $parentRunId,
            $tenantId, $inputRef, $outputRef, $errorJson, $heartbeatAtMs,
-           $runtimeOwnerId, $createdAtMs, $finishedAtMs
+           $runtimeOwnerId, $launchAuthorityJson, $createdAtMs, $finishedAtMs
          )`,
       )
       .run({
@@ -205,9 +205,57 @@ export class JournalStore {
         $errorJson: row.errorJson,
         $heartbeatAtMs: row.heartbeatAtMs,
         $runtimeOwnerId: row.runtimeOwnerId,
+        $launchAuthorityJson: row.launchAuthorityJson ?? null,
         $createdAtMs: row.createdAtMs,
         $finishedAtMs: row.finishedAtMs ?? null,
       });
+  }
+
+  pruneOneOffRuns(opts: { nowMs: number; ttlMs: number }): number {
+    if (!Number.isSafeInteger(opts.ttlMs) || opts.ttlMs < 0) {
+      throw new Error("one-off run TTL must be a non-negative safe integer");
+    }
+    const cutoff = opts.nowMs - opts.ttlMs;
+    const rows = this.db
+      .query<{ run_id: string }, [number]>(
+        `SELECT r.run_id
+         FROM runs r
+         WHERE r.finished_at_ms IS NOT NULL
+           AND r.finished_at_ms <= ?
+           AND (r.workflow_ref IS NULL OR r.workflow_ref NOT LIKE 'saved:%')
+           AND NOT EXISTS (
+             SELECT 1 FROM runs child WHERE child.parent_run_id = r.run_id
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM agent_workspaces w
+             WHERE w.run_id = r.run_id AND w.removed_at_ms IS NULL
+           )`,
+      )
+      .all(cutoff);
+    const tables = [
+      "state",
+      "agent_session_turns",
+      "agent_sessions",
+      "agent_workspaces",
+      "journal",
+      "events",
+      "approvals",
+      "signals",
+      "timers",
+      "run_profile_snapshots",
+      "run_profile_snapshot_sets",
+      "run_setting_snapshots",
+      "run_setting_snapshot_sets",
+    ] as const;
+    this.transaction(() => {
+      for (const row of rows) {
+        for (const table of tables) {
+          this.db.query(`DELETE FROM ${table} WHERE run_id = ?`).run(row.run_id);
+        }
+        this.db.query("DELETE FROM runs WHERE run_id = ?").run(row.run_id);
+      }
+    });
+    return rows.length;
   }
 
   getRun(runId: string): RunRow | null {
@@ -229,6 +277,7 @@ export class JournalStore {
         | "errorJson"
         | "heartbeatAtMs"
         | "runtimeOwnerId"
+        | "launchAuthorityJson"
         | "finishedAtMs"
       >
     >,
@@ -250,6 +299,8 @@ export class JournalStore {
       add("heartbeat_at_ms", "heartbeatAtMs", patch.heartbeatAtMs ?? null);
     if ("runtimeOwnerId" in patch)
       add("runtime_owner_id", "runtimeOwnerId", patch.runtimeOwnerId ?? null);
+    if ("launchAuthorityJson" in patch)
+      add("launch_authority_json", "launchAuthorityJson", patch.launchAuthorityJson ?? null);
     if ("finishedAtMs" in patch) add("finished_at_ms", "finishedAtMs", patch.finishedAtMs ?? null);
     if (sets.length === 0) return;
     this.db.query(`UPDATE runs SET ${sets.join(", ")} WHERE run_id = $runId`).run(params);
@@ -1494,14 +1545,15 @@ export class JournalStore {
       .query(
         `INSERT INTO capabilities (
            id, secret_hash, resource_json, actions_json, created_at_ms,
-           expires_at_ms, revoked_at_ms, note
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           expires_at_ms, revoked_at_ms, note, ceiling_profile
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(secret_hash) DO UPDATE SET
            resource_json = excluded.resource_json,
            actions_json = excluded.actions_json,
            expires_at_ms = excluded.expires_at_ms,
            revoked_at_ms = excluded.revoked_at_ms,
-           note = excluded.note`,
+           note = excluded.note,
+           ceiling_profile = excluded.ceiling_profile`,
       )
       .run(
         row.id,
@@ -1512,6 +1564,7 @@ export class JournalStore {
         row.expiresAtMs,
         row.revokedAtMs,
         row.note,
+        row.ceilingProfile ?? null,
       );
   }
 
@@ -2447,6 +2500,7 @@ interface RawRunRow {
   error_json: string | null;
   heartbeat_at_ms: number | null;
   runtime_owner_id: string | null;
+  launch_authority_json: string | null;
   created_at_ms: number;
   finished_at_ms: number | null;
 }
@@ -2635,6 +2689,7 @@ interface RawCapabilityRow {
   expires_at_ms: number | null;
   revoked_at_ms: number | null;
   note: string | null;
+  ceiling_profile: string | null;
 }
 
 interface RawAgentProfileCatalogRow {
@@ -2841,6 +2896,7 @@ function mapRun(r: RawRunRow): RunRow {
     errorJson: r.error_json,
     heartbeatAtMs: r.heartbeat_at_ms,
     runtimeOwnerId: r.runtime_owner_id,
+    launchAuthorityJson: r.launch_authority_json,
     createdAtMs: r.created_at_ms,
     finishedAtMs: r.finished_at_ms,
   };
@@ -3019,5 +3075,6 @@ function mapCapability(r: RawCapabilityRow): CapabilityRow {
     expiresAtMs: r.expires_at_ms,
     revokedAtMs: r.revoked_at_ms,
     note: r.note,
+    ceilingProfile: r.ceiling_profile,
   };
 }

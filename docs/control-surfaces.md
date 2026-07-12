@@ -148,7 +148,7 @@ versions, systemd state, logs, and restart controls are not inferred.
 
 | Operation | RPC | CLI | Execute | Web | TUI | MCP | SDK | Authority |
 |---|---|---|---|---|---|---|---|---|
-| run launch from captured source | implemented | implemented | implemented | implemented | not-applicable | deferred | not-applicable | open on local socket; admin on web; follow-up uses minted run capability |
+| run launch from captured source | implemented | implemented | implemented | implemented | not-applicable | deferred | not-applicable | trusted local/admin, or `workflow:submit` with a snapshotted ceiling; follow-up uses minted run capability |
 | run list | implemented | implemented | deferred | implemented | implemented | implemented | not-applicable | `admin` |
 | run get/report/output/blockage | implemented | implemented | implemented | implemented | implemented | partial | not-applicable | `run:read`, `run:output` |
 | run watch/events/wait | implemented | implemented | implemented | implemented | partial | implemented | not-applicable | `run:watch`, `run:events` |
@@ -157,7 +157,7 @@ versions, systemd state, logs, and restart controls are not inferred.
 | rerun/source override | implemented | deferred | deferred | implemented | deferred | deferred | not-applicable | `run:retry` |
 | interrupt run | implemented | implemented | implemented | implemented | not-applicable | implemented | not-applicable | `run:interrupt` |
 | signal delivery | implemented | implemented | implemented | implemented | implemented | implemented | `ctx.signal` and non-parking `ctx.drainSignals` implemented | `run:signal` |
-| approval decision | implemented | implemented | implemented | implemented | implemented | implemented | `ctx.human` implemented | `admin` |
+| approval decision | implemented | implemented | implemented | implemented | implemented | implemented, including `grantedCaps` | `ctx.human` implemented | `admin` |
 | workflow command effect | existing run projection/events | watch text and NDJSON implemented | existing run report/output paths | visible through run events/projection | partial | deferred | `ctx.command` implemented | workflow launch authority plus normal run read/watch/output authority |
 | workflow completion checks | existing run projection/events/output | watch text and NDJSON implemented | existing run report/output paths | visible through run events/projection | partial | deferred | `ctx.completionCheck` implemented for curated workflows | workflow launch authority plus normal run read/watch/output authority |
 | workflow checkpoints | existing run projection/events | NDJSON implemented; dedicated text rendering deferred | existing run projection/event paths | visible through run events/projection | partial | deferred | `ctx.checkpoint` implemented | workflow launch authority plus normal run read/watch authority |
@@ -166,12 +166,12 @@ versions, systemd state, logs, and restart controls are not inferred.
 | schedule put | implemented | implemented | deferred | implemented | not-applicable | deferred | not-applicable | `admin` |
 | schedule list/show | implemented | implemented | implemented | implemented | not-applicable | deferred | not-applicable | `admin` |
 | schedule enable/disable/delete | implemented | deferred | deferred | implemented | not-applicable | deferred | not-applicable | `admin` |
-| saved workflow save/install | implemented | implemented | deferred | deferred | not-applicable | deferred | not-applicable | `admin`, `workflow:save` |
+| saved workflow save/install | implemented | implemented | deferred | deferred | not-applicable | deferred | not-applicable | `admin`, `workflow:save`, plus an approved matching review gate for promotion |
 | saved workflow list/show/source | implemented | implemented | deferred | implemented | not-applicable | deferred | not-applicable | `admin`, `workflow:read` |
 | saved workflow launch/run | implemented | implemented | deferred | implemented | not-applicable | implemented | not-applicable | `workflow:run`; follow-up uses minted run capability |
 | saved workflow enable/disable/deprecate/delete | implemented | implemented | deferred | implemented | not-applicable | deferred | not-applicable | `admin`, `workflow:save` for scoped non-delete metadata |
 | workflow definition preview/source | implemented | implemented | deferred | deferred | not-applicable | deferred | not-applicable | `admin`, `run:source` depending selector |
-| workflow definition GC | implemented | implemented | deferred | deferred | not-applicable | deferred | not-applicable | `admin` |
+| one-off archive + workflow definition GC | implemented | implemented | deferred | deferred | not-applicable | deferred | not-applicable | `admin` |
 | profile catalog list/get/check | implemented | implemented | deferred | implemented | not-applicable | deferred | `profile` field consumes snapshots | `admin` |
 | profile catalog set/delete | implemented | implemented | deferred | implemented | not-applicable | deferred | not-applicable | `admin` |
 | settings catalog list/get/check | implemented | implemented | deferred | implemented | not-applicable | deferred | workflow-visible settings snapshot; daemon-operational agent concurrency limits are not SDK-visible | `admin` |

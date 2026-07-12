@@ -132,7 +132,11 @@ retried.
 Use `profile: "name"` when an operator has configured reusable defaults in the daemon profile catalog. Your explicit `ctx.agent` fields override profile fields. Profile edits affect only future launches/reruns because each run uses a frozen catalog snapshot.
 
 `toolPolicy` is only `"none"`, `"read-only"`, `"workspace-write"`, or
-`"unrestricted"`. Use `providerConfig` only for provider-owned JSON settings;
+`"unrestricted"`. Remote one-offs submitted with a submitter credential are capped by the
+credential's launch-authority ceiling. Do not assume self-declaration grants authority:
+an over-ask fails launch. Request exceptional authority with
+`ctx.human({ requestedCaps })`, branch on the returned decision, and use only its
+`grantedCaps` after approval. Use `providerConfig` only for provider-owned JSON settings;
 Keel validates the full provider-keyed map, but only the selected provider's
 entry affects replay identity or reaches the adapter. It replaces, not deep
 merges, profile config for that provider. Do not put raw secrets or workspace

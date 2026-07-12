@@ -13,6 +13,7 @@ import { MockProvider } from "../agents/mock.ts";
 import { AgentProviderRegistry } from "../agents/types.ts";
 import { hashCapabilityToken } from "../auth/capabilities.ts";
 import { JournalStore } from "../journal/store.ts";
+import { SupervisorTools } from "../mcp/tools.ts";
 import { captureWorkflowFile } from "../workflow-definitions/capture.ts";
 import {
   WORKFLOW_SDK_ABI_VERSION,
@@ -47,10 +48,128 @@ const signalThenAgentUrl = captureWorkflowFile(
   new URL("../kernel/realm/fixtures/signal-then-agent.workflow.ts", import.meta.url).pathname,
 );
 const ADMIN_TOKEN = "kc_admin_test";
+const SUBMITTER_TOKEN = "kc_submitter_test";
 
 let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "keel-daemon-"));
+});
+
+describe("submission hardening", () => {
+  test("submitter over-asks fail at launch with a structured ceiling error", async () => {
+    const socketPath = join(dir, "submitter-ceiling.sock");
+    const daemon = new KeelDaemon({
+      socketPath,
+      dbPath: join(dir, "submitter-ceiling.db"),
+      adminToken: ADMIN_TOKEN,
+      submitterToken: SUBMITTER_TOKEN,
+    });
+    await daemon.start();
+    try {
+      const response = await rawFrame(socketPath, {
+        id: 1,
+        method: "launchRun",
+        credential: SUBMITTER_TOKEN,
+        params: {
+          source: `export default async function workflow(ctx) {
+            return ctx.agent({ key: "unsafe", prompt: "x", toolPolicy: "unrestricted" });
+          }`,
+          input: null,
+          target: dir,
+        },
+      });
+      expect(response.error).toMatchObject({
+        code: "capability_ceiling_exceeded",
+        details: { profile: "untrusted-default" },
+      });
+      const store = JournalStore.open(join(dir, "submitter-ceiling.db"));
+      expect(store.listRuns()).toEqual([]);
+      store.close();
+    } finally {
+      daemon.stop();
+    }
+  });
+
+  test("MCP approval grants caps and the reviewed definition can be promoted", async () => {
+    const socketPath = join(dir, "submitter-escalation.sock");
+    const dbPath = join(dir, "submitter-escalation.db");
+    const source = `
+      import { type Capabilities, type Ctx } from "@kcosr/keel";
+      export default async function workflow(ctx: Ctx): Promise<string> {
+        const decision = await ctx.human({
+          key: "review-escalation",
+          prompt: "Allow a reviewed host command?",
+          requestedCaps: { fs: "workspace-write", shell: true, network: "none" },
+        });
+        if (decision.status !== "approved") return "denied";
+        const workspace = await ctx.workspace({
+          key: "workspace",
+          mode: "direct",
+          path: ctx.run.target,
+        });
+        const result = await ctx.command({
+          key: "after-review",
+          workspace,
+          cwd: ".",
+          mode: "argv",
+          argv: ["/bin/sh", "-c", "printf granted"],
+          capabilities: decision.grantedCaps as Partial<Capabilities>,
+          timeoutMs: 5_000,
+          maxStdoutBytes: 1_000,
+          maxStderrBytes: 1_000,
+        });
+        return result.stdout;
+      }
+    `;
+    const daemon = new KeelDaemon({
+      socketPath,
+      dbPath,
+      adminToken: ADMIN_TOKEN,
+      submitterToken: SUBMITTER_TOKEN,
+      superviseMs: 100_000,
+    });
+    await daemon.start();
+    let tools: SupervisorTools | null = null;
+    try {
+      const submitter = await DaemonClient.connect(socketPath);
+      await submitter.authenticate(SUBMITTER_TOKEN);
+      const launched = await submitter.launchRun({ source, input: null, target: dir });
+      await submitter.authenticate(launched.capability as string);
+      await submitter.waitForRun(launched.runId);
+      expect((await submitter.getRun(launched.runId))?.status).toBe("waiting-human");
+
+      tools = await SupervisorTools.connect({ socketPath, credential: ADMIN_TOKEN });
+      const blockage = await tools.getRunBlockage(launched.runId);
+      expect(blockage.approvalId).toBeTruthy();
+      await tools.decideApproval(blockage.approvalId as string, "approved", "reviewed", {
+        fs: "workspace-write",
+        shell: true,
+        network: "none",
+        secrets: [],
+      });
+      await expect(submitter.waitForRun(launched.runId)).resolves.toMatchObject({
+        status: "finished",
+        output: { text: "granted", truncated: false },
+      });
+
+      await submitter.authenticate(ADMIN_TOKEN);
+      await expect(submitter.saveWorkflow({ name: "reviewed-command", source })).rejects.toThrow(
+        /requires reviewApproval/,
+      );
+      const saved = await submitter.saveWorkflow({
+        name: "reviewed-command",
+        source,
+        reviewApproval: { runId: launched.runId, key: "review-escalation" },
+      });
+      const reviewedRun = await submitter.getRun(launched.runId);
+      if (!reviewedRun) throw new Error("reviewed run missing");
+      expect(saved.definitionHash).toBe(reviewedRun.definitionVersion);
+      submitter.close();
+    } finally {
+      tools?.close();
+      daemon.stop();
+    }
+  }, 15_000);
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -840,6 +959,7 @@ describe("capability auth", () => {
       await launcher.authenticate(first.capability as string);
       await launcher.waitForRun(first.runId);
 
+      await launcher.authenticate(ADMIN_TOKEN);
       const second = await launcher.launchRun({
         ...chainUrl,
         input: { n: 2 },
@@ -1165,6 +1285,7 @@ describe("capability auth", () => {
       );
       await until(() => Promise.resolve(firstEvents.includes("run.started")), 2000);
 
+      await client.authenticate(ADMIN_TOKEN);
       const second = await client.launchRun({
         ...chainUrl,
         input: { n: 2 },

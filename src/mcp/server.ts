@@ -103,10 +103,18 @@ export function createSupervisorMcpServer(tools: SupervisorTools): McpServer {
         approvalId: z.string().min(1),
         decision: z.enum(["approved", "denied"]),
         note: z.string().optional(),
+        grantedCaps: z
+          .object({
+            fs: z.enum(["none", "read", "workspace-write"]).optional(),
+            network: z.union([z.literal("none"), z.array(z.string().min(1))]).optional(),
+            shell: z.boolean().optional(),
+            secrets: z.array(z.string().min(1)).optional(),
+          })
+          .optional(),
       },
     },
-    async ({ approvalId, decision, note }) =>
-      result(await tools.decideApproval(approvalId, decision, note)),
+    async ({ approvalId, decision, note, grantedCaps }) =>
+      result(await tools.decideApproval(approvalId, decision, note, grantedCaps)),
   );
   server.registerTool(
     "interrupt_run",

@@ -203,7 +203,7 @@ function topHelp(): string {
     "Commands:",
     ...rows,
     "",
-    "Environment: KEEL_SOCKET, KEEL_DB, KEEL_DIR, KEEL_ADMIN_TOKEN, KEEL_RUN_CAP, KEEL_CAP_FILE, KEEL_CAP_DIR, KEEL_WORKSPACE_STORE",
+    "Environment: KEEL_SOCKET, KEEL_DB, KEEL_DIR, KEEL_ADMIN_TOKEN, KEEL_SUBMITTER_TOKEN, KEEL_RUN_CAP, KEEL_CAP_FILE, KEEL_CAP_DIR, KEEL_WORKSPACE_STORE",
     "Run `keel help <command>` for one command.",
     "",
   ].join("\n");
@@ -251,6 +251,9 @@ async function dispatch(argv: string[]): Promise<number> {
         dbPath: DB,
         agents,
         ...(process.env.KEEL_ADMIN_TOKEN ? { adminToken: process.env.KEEL_ADMIN_TOKEN } : {}),
+        ...(process.env.KEEL_SUBMITTER_TOKEN
+          ? { submitterToken: process.env.KEEL_SUBMITTER_TOKEN }
+          : {}),
         ...(process.env.KEEL_WORKSPACE_STORE
           ? { workspaceStore: process.env.KEEL_WORKSPACE_STORE }
           : {}),
@@ -1888,6 +1891,9 @@ async function handleWorkflow(args: string[]): Promise<number> {
         defaultTarget: parsed.defaultTarget,
         ...(parsed.version !== undefined ? { version: parsed.version } : {}),
         allowDuplicateDefinition: parsed.allowDuplicateDefinition,
+        ...(parsed.reviewRun && parsed.reviewKey
+          ? { reviewApproval: { runId: parsed.reviewRun, key: parsed.reviewKey } }
+          : {}),
       });
       process.stdout.write(
         `${JSON.stringify({
@@ -2074,6 +2080,8 @@ function parseWorkflowSaveArgs(args: string[]): {
   workflowName?: string | null;
   version?: number;
   allowDuplicateDefinition: boolean;
+  reviewRun?: string;
+  reviewKey?: string;
 } {
   const out: {
     name?: string;
@@ -2087,6 +2095,8 @@ function parseWorkflowSaveArgs(args: string[]): {
     workflowName?: string | null;
     version?: number;
     allowDuplicateDefinition: boolean;
+    reviewRun?: string;
+    reviewKey?: string;
   } = { tags: [], allowDuplicateDefinition: false };
   const positional: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
@@ -2106,11 +2116,16 @@ function parseWorkflowSaveArgs(args: string[]): {
     else if (arg === "--version")
       out.version = parsePositiveInteger(requireFlagValue(args, i++, "--version"), "--version");
     else if (arg === "--allow-duplicate-definition") out.allowDuplicateDefinition = true;
+    else if (arg === "--review-run") out.reviewRun = requireFlagValue(args, i++, "--review-run");
+    else if (arg === "--review-key") out.reviewKey = requireFlagValue(args, i++, "--review-key");
     else if (arg.startsWith("--")) throw new Error(`unknown workflow save flag ${arg}`);
     else positional.push(arg);
   }
   if (positional.length > 2)
     throw new Error(`unexpected argument ${positional[2]} for workflow save`);
+  if ((out.reviewRun === undefined) !== (out.reviewKey === undefined)) {
+    throw new Error("workflow save requires --review-run and --review-key together");
+  }
   out.name = positional[0];
   out.file = positional[1];
   return out;
@@ -2794,6 +2809,7 @@ function structuredError(err: unknown): { code: string; message: string; name: s
 
 function loadCredential(): string | null {
   if (process.env.KEEL_ADMIN_TOKEN) return process.env.KEEL_ADMIN_TOKEN;
+  if (process.env.KEEL_SUBMITTER_TOKEN) return process.env.KEEL_SUBMITTER_TOKEN;
   if (process.env.KEEL_RUN_CAP) return process.env.KEEL_RUN_CAP;
   if (process.env.KEEL_CAP_FILE) return loadCredentialFromFile(process.env.KEEL_CAP_FILE);
   return null;
