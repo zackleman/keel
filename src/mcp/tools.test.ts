@@ -17,6 +17,7 @@ const FIXTURES = new URL("../kernel/realm/fixtures/", import.meta.url);
 const chainSource = captureWorkflowFile(new URL("chain.workflow.ts", FIXTURES).pathname);
 const gateSource = captureWorkflowFile(new URL("gate.workflow.ts", FIXTURES).pathname);
 const signalSource = captureWorkflowFile(new URL("await-signal.workflow.ts", FIXTURES).pathname);
+const stateSource = captureWorkflowFile(new URL("state.workflow.ts", FIXTURES).pathname);
 
 describe("supervisor MCP tools", () => {
   let dir: string;
@@ -66,6 +67,17 @@ describe("supervisor MCP tools", () => {
       phase: canonical.phase,
     });
     expect((await tools.listRuns(1)).runs[0]?.runId).toBe(launched.runId);
+
+    const stateRun = await admin.launchRun({
+      source: stateSource.source,
+      input: null,
+      target: process.cwd(),
+    });
+    await admin.waitForRun(stateRun.runId);
+    const rpcState = await admin.getRunState(stateRun.runId, "research");
+    if (!rpcState) throw new Error("state run is missing");
+    expect(await tools.getState(stateRun.runId, "research")).toEqual(rpcState);
+    expect(rpcState).toEqual({ research: { count: 3, history: [1, 2, 3] } });
 
     const first = await tools.tailEvents(launched.runId, 0, undefined, 1);
     const second = await tools.tailEvents(launched.runId, first.nextCursor, undefined, 500);
@@ -163,6 +175,7 @@ describe("supervisor MCP tools", () => {
           "decide_approval",
           "get_run_blockage",
           "get_run_detail",
+          "get_state",
           "interrupt_run",
           "launch_saved_workflow",
           "list_runs",

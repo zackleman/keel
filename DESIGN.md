@@ -212,7 +212,15 @@ The prior-runtime defects that shaped Keel map to these requirements:
 | **Completion check effect** | `ctx.completionCheck(spec)` — host-side command/git gate for curated workflow completion. | Validate workspace row and check identity, write pending row, acquire the workspace holder, run the check, persist bounded result and events. | Matching completed checks replay. New completion attempts use new keys and observe current workspace/git/remote state. Pending identity mismatches fail closed. | `completion_check` |
 | **Checkpoint effect** | `ctx.checkpoint({ key, message, data? })` — durable, non-parking progress. | Write a strict pending row, then transactionally commit the payload result and one durable `checkpoint` event. | Matching completed checkpoints replay without another event. Matching pending checkpoints re-execute; pending identity mismatches fail closed. | `checkpoint` |
 | **Signal drain effect** | `ctx.drainSignals(key, name)` — non-parking FIFO batch consumption. | Write a strict pending row, then consume every currently pending signal of `name` in the same transaction as the completed batch result. | Matching completed drains replay the recorded batch without consuming later signals. Matching pending drains retry; pending identity mismatches fail closed. | `drain_signals` |
+| **State write effect** | `ctx.state(namespace).set({ key, name, value })` — run-scoped whole-value LWW write. | Write a strict pending row, then commit the result and materialized state row atomically. | Matching writes replay their value and touch the materialized row in program order, rebuilding the synchronous fold. Pending identity mismatches fail closed. | `state_write` |
 | **Ambient** | `ctx.now()`, `ctx.random()`, `ctx.sleep()`. | Generate/record once. | Replay the recorded value (`sleep`: already-elapsed if the wake time passed). | `ambient` |
+
+State reads are plain synchronous fold reads, not effects. Every awaited state write,
+whether executed or replayed, updates the worker's namespace map in program order.
+The executor also upserts a rebuildable `state` table in the same transaction as
+write completion. Rewind deletes that cache and replay-touch rebuilds it; forks
+copy no cache; `continueAsNew` carries state only when workflow input does so
+explicitly.
 
 Plain code *between* `ctx.*` calls (loops, `if`, dedupe logic) is not journaled.
 It re-runs on every resume; because the `ctx.*` calls it interleaves
@@ -659,6 +667,12 @@ interface Ctx {
 
   // Durable ordered progress; awaits journal + event persistence and never parks.
   checkpoint(spec: { key: string; message: string; data?: Json }): Promise<void>;
+
+  // Run-scoped state: journaled writes and synchronous deterministic fold reads.
+  state<S extends Record<string, Json>>(
+    namespace: string,
+    schemas?: { [K in keyof S]?: Schema<S[K]> },
+  ): StateNamespace<S>;
 
   // Non-parking consumption of all currently pending signals under one name.
   drainSignals<T = unknown>(key: string, name: string): Promise<T[]>;

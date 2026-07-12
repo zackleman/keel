@@ -29,6 +29,7 @@ const projection: RunProjection = {
   phase: "working",
   error: null,
   stats: { steps: 1, agents: 0, checkpointCount: 0, artifacts: 0 },
+  state: {},
   nodes: [
     {
       stableKey: "step.one",

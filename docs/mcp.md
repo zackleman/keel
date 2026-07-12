@@ -31,6 +31,7 @@ the capability's actions, but cannot list runs or decide approvals.
 | `list_runs` | Bounded newest-run summary page. |
 | `watch_run` | Compact status, phase, and blockage polling result. |
 | `get_run_detail` | Canonical `RunProjection`, optionally paired with its report. |
+| `get_state` | Current run-scoped state, optionally filtered to one namespace. |
 | `get_run_blockage` | Waiting reason and an `approvalId` for a pending human gate. |
 | `tail_checkpoints` | Bounded durable `checkpoint` event page. |
 | `tail_events` | Bounded durable event page, optionally filtered by event type. |
@@ -49,7 +50,8 @@ the next `afterSeq`; ephemeral live deltas are intentionally excluded.
 
 1. Launch a reviewed saved workflow with `launch_saved_workflow`.
 2. Poll `watch_run` for its compact state.
-3. Read progress with `tail_checkpoints`, persisting `nextCursor` after each page.
+3. Read progress with `tail_checkpoints`, persisting `nextCursor` after each page,
+   and inspect live workflow state with `get_state`.
 4. Use `send_signal` to steer workflows that consume that signal.
 5. When `get_run_blockage` reports `waiting_human`, pass its `approvalId` to
    `decide_approval`.

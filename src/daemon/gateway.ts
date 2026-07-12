@@ -330,6 +330,16 @@ export class KeelOperationGateway {
         return this.opts.api.getRun(p.runId as string);
       },
     },
+    getRunState: {
+      kind: "core",
+      handle: (_session, p, credential) => {
+        this.authorizeRunCredential(credential, p.runId as string, "run:read");
+        return this.opts.api.getRunState(
+          p.runId as string,
+          typeof p.namespace === "string" ? p.namespace : undefined,
+        );
+      },
+    },
     getRunReport: {
       kind: "core",
       handle: (_session, p, credential) => {

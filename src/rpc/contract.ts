@@ -30,6 +30,7 @@ import type {
   RunProjection,
   RunReport,
   RunStart,
+  RunStateSnapshot,
   RunSummary,
   RunSummaryPage,
   RunWorkspaceDiff,
@@ -159,6 +160,7 @@ export type {
   RunProjection,
   RunReport,
   RunStart,
+  RunStateSnapshot,
   RunStatus,
   RunSummary,
   RunSummaryPage,
@@ -322,6 +324,8 @@ export interface KeelApi {
   forkRun(runId: string, opts?: { atStableKey?: string; newRunId?: string }): RunLaunchResult;
   /** The canonical projection for one run. */
   getRun(runId: string): RunProjection | null;
+  /** Current run-scoped state, resolving values up to the RPC cap. */
+  getRunState(runId: string, namespace?: string): RunStateSnapshot | null;
   /** Post-run result digest from journaled node results. */
   getRunReport(runId: string): RunReport | null;
   /** Why is this run stuck? (§12.2). */

@@ -323,6 +323,7 @@ function projection(runId: string): RunProjection {
     createdAtMs: Date.UTC(2026, 5, 14, 1, 0, 0, 0),
     finishedAtMs: null,
     nodes: [],
+    state: {},
     phase: null,
     error: null,
     stats: { steps: 0, agents: 0, checkpointCount: 0, artifacts: 0 },

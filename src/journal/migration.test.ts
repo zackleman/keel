@@ -3,7 +3,7 @@
 
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RealmKernel } from "../kernel/realm/realm-host.ts";
@@ -206,6 +206,42 @@ function insertOldWorkflowDefinition(
 }
 
 describe("schema migrations", () => {
+  test("a copied v22 journal migrates to v23 with the state table", () => {
+    const dir = mkdtempSync(join(tmpdir(), "keel-mig-v23-state-"));
+    try {
+      const sourcePath = join(dir, "source.db");
+      JournalStore.open(sourcePath).close();
+      const path = join(dir, "old.db");
+      copyFileSync(sourcePath, path);
+      const old = new Database(path);
+      old.exec("DROP TABLE state");
+      old.query("UPDATE schema_meta SET value = '22' WHERE key = 'schema_version'").run();
+      old.close();
+
+      const store = JournalStore.open(path);
+      expect(
+        store.db
+          .query<{ value: string }, []>(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'",
+          )
+          .get()?.value,
+      ).toBe("23");
+      store.putStateRow({
+        runId: "run",
+        namespace: "research",
+        name: "best",
+        valueInline: "1",
+        valueArtifact: null,
+        writtenKey: "write#1",
+        updatedAtMs: 1,
+      });
+      expect(store.getRunState("run")).toHaveLength(1);
+      store.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("a v4 DB migrates forward to the current schema in place and idempotently", () => {
     const dir = mkdtempSync(join(tmpdir(), "keel-mig-"));
     try {

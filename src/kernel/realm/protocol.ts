@@ -17,6 +17,7 @@ import type {
   CompletionCheckResult,
   NormalizedCompletionCheckEffectSpec,
 } from "../completion-check.ts";
+import type { NormalizedStateWrite } from "../state.ts";
 
 /** SAB layout: Int32 control[0] is the ambient handshake flag; Float64 holds
  * the returned number. */
@@ -133,6 +134,12 @@ export type WorkerRequest =
       key: string;
       name: string;
       inputs: unknown;
+      version: string;
+    }
+  | {
+      type: "state-write";
+      id: number;
+      state: NormalizedStateWrite;
       version: string;
     }
   | {

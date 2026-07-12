@@ -7,6 +7,7 @@ import type {
   RunProjection,
   RunReport,
   RunStart,
+  RunStateSnapshot,
   RunSummaryPage,
 } from "../rpc/contract.ts";
 import type { Blockage } from "../rpc/projection.ts";
@@ -69,6 +70,13 @@ export class SupervisorTools {
     const report = await this.client.getRunReport(runId);
     if (!report) throw new Error(`run ${runId} not found`);
     return this.safe({ run, report });
+  }
+
+  async getState(runId: string, namespace?: string): Promise<RunStateSnapshot> {
+    await this.requireRun(runId);
+    const state = await this.client.getRunState(runId, namespace);
+    if (!state) throw new Error(`run ${runId} not found`);
+    return this.safe(state);
   }
 
   async getRunBlockage(runId: string): Promise<RunBlockage> {

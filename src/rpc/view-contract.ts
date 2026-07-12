@@ -42,9 +42,17 @@ export interface RunSummaryPage {
   total: number;
 }
 
+export interface StateArtifactStub {
+  $artifact: string;
+  byteLen: number;
+}
+
+export type RunStateSnapshot = Record<string, Record<string, Json | StateArtifactStub>>;
+
 export interface RunProjection extends RunSummary {
   definitionVersion: string;
   nodes: NodeView[];
+  state: RunStateSnapshot;
   /** The current phase, if any. */
   phase: string | null;
   error: { name: string; message: string } | null;

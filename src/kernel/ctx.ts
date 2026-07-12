@@ -64,6 +64,13 @@ import {
 import { drainSignalsVersionIdentity, normalizeDrainSignals } from "./drain-signals.ts";
 import { runBoundedProcess } from "./process-runner.ts";
 import type { Schema } from "./schema.ts";
+import {
+  type StateNamespace,
+  type StateSchemas,
+  normalizeStateNamespace,
+  normalizeStateWrite,
+  stateVersionIdentity,
+} from "./state.ts";
 import { StepEngine, prepareStepResult } from "./step-engine.ts";
 import { computeVersion } from "./version.ts";
 import type { WorkspaceSetupSpec } from "./workspace-setup.ts";
@@ -91,6 +98,7 @@ export type {
   NormalizedCompletionCheck,
 } from "./completion-check.ts";
 export type { CheckpointSpec } from "./checkpoint.ts";
+export type { StateNamespace, StateSchemas, StateSetSpec } from "./state.ts";
 export type { WorkspaceSetupCommand, WorkspaceSetupSpec } from "./workspace-setup.ts";
 
 const SESSION_STABLE_KEY_PREFIX = "__session.";
@@ -299,6 +307,12 @@ export interface Ctx {
   /** Journal a durable, strictly ordered progress update. */
   checkpoint(spec: CheckpointSpec): Promise<void>;
 
+  /** Open a run-scoped state namespace. The handle itself is pure and synchronous. */
+  state<S extends Record<string, Json>>(
+    namespace: string,
+    schemas?: StateSchemas<S>,
+  ): StateNamespace<S>;
+
   /** Atomically consume all currently pending signals of `name` without parking. */
   drainSignals<T = unknown>(key: string, name: string): Promise<T[]>;
 
@@ -358,6 +372,7 @@ export interface CtxHost {
 /** In-process `ctx`: runs step fns locally, journals via StepEngine. */
 export class WorkflowCtx implements Ctx {
   private readonly engine: StepEngine;
+  private readonly stateValues = new Map<string, Map<string, Json>>();
   private readonly registry: AgentProviderRegistry | undefined;
   private readonly agentProfiles: Record<string, unknown> | undefined;
   private readonly workspaceScope = new AsyncLocalStorage<WorkspaceHandle>();
@@ -533,6 +548,53 @@ export class WorkflowCtx implements Ctx {
         },
       ],
     );
+  }
+
+  state<S extends Record<string, Json>>(
+    rawNamespace: string,
+    schemas?: StateSchemas<S>,
+  ): StateNamespace<S> {
+    const namespace = normalizeStateNamespace(rawNamespace);
+    let values = this.stateValues.get(namespace);
+    if (!values) {
+      values = new Map<string, Json>();
+      this.stateValues.set(namespace, values);
+    }
+    const fold = values;
+    return Object.freeze({
+      set: async <K extends keyof S & string>(rawSpec: {
+        key: string;
+        name: K;
+        value: S[K];
+      }): Promise<void> => {
+        const spec = normalizeStateWrite(namespace, schemas, rawSpec);
+        assertNotReservedAuthorKey(spec.stableKey, "ctx.state.set");
+        const version = computeVersion({ spec: stateVersionIdentity(spec.schemaHash) });
+        const begun = this.engine.beginStateWrite(
+          spec.stableKey,
+          spec.identity,
+          version,
+          spec.namespace,
+          spec.name,
+        );
+        if (begun.kind === "execute") {
+          this.engine.completeStateWrite(
+            spec.stableKey,
+            begun.attempt,
+            version,
+            begun.inputHash,
+            begun.startedAtMs,
+            spec.namespace,
+            spec.name,
+            spec.value,
+          );
+        }
+        fold.set(spec.name, spec.value);
+      },
+      get: <K extends keyof S & string>(name: K): S[K] | undefined =>
+        fold.get(name) as S[K] | undefined,
+      snapshot: (): Readonly<Partial<S>> => Object.freeze(Object.fromEntries(fold) as Partial<S>),
+    });
   }
 
   async drainSignals<T>(key: string, name: string): Promise<T[]> {

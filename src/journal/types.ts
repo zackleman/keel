@@ -11,6 +11,7 @@ export type EffectType =
   | "completion_check"
   | "checkpoint"
   | "drain_signals"
+  | "state_write"
   | "workspace_setup"
   | "ambient";
 
@@ -76,6 +77,16 @@ export interface JournalRow {
   errorJson: string | null;
   startedAtMs: number | null;
   finishedAtMs: number | null;
+}
+
+export interface StateRow {
+  runId: string;
+  namespace: string;
+  name: string;
+  valueInline: string | null;
+  valueArtifact: string | null;
+  writtenKey: string;
+  updatedAtMs: number;
 }
 
 export interface AgentSessionRow {

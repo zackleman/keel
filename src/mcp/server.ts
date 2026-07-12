@@ -45,6 +45,15 @@ export function createSupervisorMcpServer(tools: SupervisorTools): McpServer {
     async ({ runId, includeReport }) => result(await tools.getRunDetail(runId, includeReport)),
   );
   server.registerTool(
+    "get_state",
+    {
+      description: "Get the current materialized run-scoped state, optionally for one namespace.",
+      inputSchema: { runId: runIdSchema, namespace: z.string().min(1).optional() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ runId, namespace }) => result(await tools.getState(runId, namespace)),
+  );
+  server.registerTool(
     "get_run_blockage",
     {
       description: "Explain what a run is waiting on. Human waits include an approvalId.",

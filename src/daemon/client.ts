@@ -22,6 +22,7 @@ import type {
   RunLaunchResult,
   RunOutcome,
   RunStart,
+  RunStateSnapshot,
   RunWorkspaceDiff,
   RunWorkspaceView,
   SaveWorkflowRequest,
@@ -240,6 +241,9 @@ export class DaemonClient {
   }
   getRun(runId: string): Promise<RunProjection | null> {
     return this.rpc("getRun", { runId });
+  }
+  getRunState(runId: string, namespace?: string): Promise<RunStateSnapshot | null> {
+    return this.rpc("getRunState", { runId, ...(namespace === undefined ? {} : { namespace }) });
   }
   getRunReport(runId: string): Promise<RunReport | null> {
     return this.rpc("getRunReport", { runId });

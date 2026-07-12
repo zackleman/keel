@@ -16,6 +16,7 @@ import {
   AgentProviderRegistry,
   type AgentResult,
 } from "../agents/types.ts";
+import { sha256Hex } from "../hash.ts";
 import { JournalStore } from "../journal/store.ts";
 import type { AgentWorkspaceStatus, RunStatus } from "../journal/types.ts";
 import { RUN_FINISHED_INLINE_OUTPUT_BYTES } from "../kernel/output.ts";
@@ -42,6 +43,17 @@ const reviewUrl = captureWorkflowFile(new URL("agent-review.workflow.ts", FIX).p
 const chainUrl = captureWorkflowFile(new URL("chain.workflow.ts", FIX).pathname);
 const flakyUrl = captureWorkflowFile(new URL("flaky.workflow.ts", FIX).pathname);
 const signalUrl = captureWorkflowFile(new URL("await-signal.workflow.ts", FIX).pathname);
+const STATE_WORKFLOW = {
+  source: `
+    import { type Ctx } from "@kcosr/keel";
+    export default async function state(ctx: Ctx, input: { large: string }) {
+      const data = ctx.state<{ small: number; large: string }>("data");
+      await data.set({ key: "state.small", name: "small", value: 1 });
+      await data.set({ key: "state.large", name: "large", value: input.large });
+      return data.snapshot();
+    }
+  `,
+};
 const WORKFLOW_TEST_TIMEOUT_MS = 20_000;
 
 class TestInProcessKeel extends InProcessKeel {
@@ -917,6 +929,7 @@ describe("projection is golden-locked", () => {
         finishedAtMs: 1,
         phase: null,
         error: null,
+        state: {},
         nodes: [
           {
             stableKey: "s0",
@@ -951,6 +964,36 @@ describe("projection is golden-locked", () => {
         ],
         stats: { steps: 3, agents: 0, checkpointCount: 0, artifacts: 0 },
       });
+    },
+    WORKFLOW_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "state writes and bounded artifact stubs are golden-locked",
+    async () => {
+      const store = JournalStore.memory();
+      const api = keel(store);
+      const large = "x".repeat(2_000);
+      await api.launchRun({ ...STATE_WORKFLOW, input: { large }, name: "state" });
+      await api.waitForRun("run_0");
+
+      const artifactJson = JSON.stringify(large);
+      expect(api.getRun("run_0")).toMatchObject({
+        state: {
+          data: {
+            small: 1,
+            large: {
+              $artifact: sha256Hex(artifactJson),
+              byteLen: new TextEncoder().encode(artifactJson).byteLength,
+            },
+          },
+        },
+        nodes: [
+          { stableKey: "state.large", effectType: "state_write", artifactBacked: true },
+          { stableKey: "state.small", effectType: "state_write", artifactBacked: false },
+        ],
+      });
+      expect(api.getRunState("run_0")).toEqual({ data: { large, small: 1 } });
     },
     WORKFLOW_TEST_TIMEOUT_MS,
   );

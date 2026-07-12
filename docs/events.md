@@ -21,6 +21,11 @@ A completed `ctx.checkpoint` appends one durable `checkpoint` frame with
 journal row commit in one transaction. Replaying a completed checkpoint does not
 append another frame; a pending checkpoint re-executes after a crash.
 
+`ctx.state(...).set(...)` is a journaled `state_write` node but emits no dedicated
+event. Its completed journal row and materialized state entry commit atomically.
+Observe current state through `RunProjection.state`, `getRunState`, or MCP
+`get_state`; event cursors are unchanged.
+
 ## Cursors
 
 Subscription APIs use a request object:

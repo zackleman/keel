@@ -1,6 +1,7 @@
 import {
   Box,
   CircleCheck,
+  Database,
   Flag,
   FolderCog,
   Globe,
@@ -36,6 +37,7 @@ const EFFECT_ICON = {
   completion_check: CircleCheck,
   checkpoint: Flag,
   drain_signals: Inbox,
+  state_write: Database,
   workspace_setup: FolderCog,
   ambient: Globe,
 } satisfies Record<EffectType, LucideIcon>;

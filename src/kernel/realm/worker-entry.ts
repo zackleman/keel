@@ -42,6 +42,13 @@ import {
 } from "../completion-check.ts";
 import { drainSignalsVersionIdentity, normalizeDrainSignals } from "../drain-signals.ts";
 import type { Schema } from "../schema.ts";
+import {
+  type StateNamespace,
+  type StateSchemas,
+  normalizeStateNamespace,
+  normalizeStateWrite,
+  stateVersionIdentity,
+} from "../state.ts";
 import { closureOfHelpers, computeVersion } from "../version.ts";
 import {
   CONTROL_WORDS,
@@ -510,6 +517,8 @@ interface Schemaish<T> {
   parse(value: unknown): T;
 }
 
+const stateValues = new Map<string, Map<string, Json>>();
+
 const ctx = Object.freeze({
   get run(): { readonly id: string; readonly target: string } {
     return Object.freeze({
@@ -763,6 +772,38 @@ const ctx = Object.freeze({
       type: "checkpoint",
       checkpoint,
       version,
+    });
+  },
+  state<S extends Record<string, Json>>(
+    rawNamespace: string,
+    schemas?: StateSchemas<S>,
+  ): StateNamespace<S> {
+    const namespace = normalizeStateNamespace(rawNamespace);
+    let values = stateValues.get(namespace);
+    if (!values) {
+      values = new Map<string, Json>();
+      stateValues.set(namespace, values);
+    }
+    const fold = values;
+    return Object.freeze({
+      set: async <K extends keyof S & string>(rawSpec: {
+        key: string;
+        name: K;
+        value: S[K];
+      }): Promise<void> => {
+        const state = normalizeStateWrite(namespace, schemas, rawSpec);
+        assertNotReservedAuthorKey(state.stableKey, "ctx.state.set");
+        const version = computeVersion({ spec: stateVersionIdentity(state.schemaHash) });
+        const reply = await rpc<{ value: Json }>({
+          type: "state-write",
+          state,
+          version,
+        });
+        fold.set(state.name, reply.value);
+      },
+      get: <K extends keyof S & string>(name: K): S[K] | undefined =>
+        fold.get(name) as S[K] | undefined,
+      snapshot: (): Readonly<Partial<S>> => Object.freeze(Object.fromEntries(fold) as Partial<S>),
     });
   },
   async drainSignals<T>(key: unknown, name: unknown): Promise<T[]> {

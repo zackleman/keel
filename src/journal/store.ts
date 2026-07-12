@@ -33,6 +33,7 @@ import type {
   SavedWorkflowRow,
   SavedWorkflowVersionRow,
   ScheduleRow,
+  StateRow,
   WorkflowDefinitionRow,
 } from "./types.ts";
 
@@ -395,6 +396,45 @@ export class JournalStore {
       )
       .all(runId)
       .map(mapJournal);
+  }
+
+  putStateRow(row: StateRow): void {
+    this.db
+      .query(
+        `INSERT INTO state (
+           run_id, namespace, name, value_inline, value_artifact, written_key, updated_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (run_id, namespace, name) DO UPDATE SET
+           value_inline = excluded.value_inline,
+           value_artifact = excluded.value_artifact,
+           written_key = excluded.written_key,
+           updated_at_ms = excluded.updated_at_ms`,
+      )
+      .run(
+        row.runId,
+        row.namespace,
+        row.name,
+        row.valueInline,
+        row.valueArtifact,
+        row.writtenKey,
+        row.updatedAtMs,
+      );
+  }
+
+  getRunState(runId: string, namespace?: string): StateRow[] {
+    const rows =
+      namespace === undefined
+        ? this.db
+            .query<RawStateRow, [string]>(
+              "SELECT * FROM state WHERE run_id = ? ORDER BY namespace, name",
+            )
+            .all(runId)
+        : this.db
+            .query<RawStateRow, [string, string]>(
+              "SELECT * FROM state WHERE run_id = ? AND namespace = ? ORDER BY namespace, name",
+            )
+            .all(runId, namespace);
+    return rows.map(mapState);
   }
 
   // ---- events -------------------------------------------------------------
@@ -1978,6 +2018,7 @@ export class JournalStore {
         )
         .get(runId, stableKey)?.m;
       if (cut == null) return;
+      this.db.query("DELETE FROM state WHERE run_id = ?").run(runId);
       // decrement refcounts for artifact-backed rows about to be discarded
       const orphans = this.db
         .query<{ result_artifact: string }, [string, number]>(
@@ -2416,6 +2457,16 @@ interface RawJournalRow {
   finished_at_ms: number | null;
 }
 
+interface RawStateRow {
+  run_id: string;
+  namespace: string;
+  name: string;
+  value_inline: string | null;
+  value_artifact: string | null;
+  written_key: string;
+  updated_at_ms: number;
+}
+
 interface RawAgentSessionRow {
   run_id: string;
   agent_key: string;
@@ -2814,6 +2865,18 @@ function mapJournal(r: RawJournalRow): JournalRow {
     errorJson: r.error_json,
     startedAtMs: r.started_at_ms,
     finishedAtMs: r.finished_at_ms,
+  };
+}
+
+function mapState(r: RawStateRow): StateRow {
+  return {
+    runId: r.run_id,
+    namespace: r.namespace,
+    name: r.name,
+    valueInline: r.value_inline,
+    valueArtifact: r.value_artifact,
+    writtenKey: r.written_key,
+    updatedAtMs: r.updated_at_ms,
   };
 }
 

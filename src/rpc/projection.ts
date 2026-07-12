@@ -17,6 +17,7 @@ import type {
   ReportNodeView,
   RunProjection,
   RunReport,
+  RunStateSnapshot,
   RunStats,
   RunSummary,
   RunSummaryPage,
@@ -40,12 +41,14 @@ export type {
   RunSummary,
   RunSummaryPage,
   RunStats,
+  RunStateSnapshot,
   ScheduleErrorProjection,
   ScheduleSummary,
   ScheduleView,
 } from "./view-contract.ts";
 
 export const MAX_RUN_SUMMARY_PAGE_LIMIT = 500;
+export const MAX_RUN_STATE_VALUE_BYTES = 64 * 1024;
 
 /** Build the canonical projection for a run from the journal + events. */
 export function buildProjection(store: JournalStore, runId: string): RunProjection | null {
@@ -105,10 +108,49 @@ export function buildProjection(store: JournalStore, runId: string): RunProjecti
     createdAtMs: run.createdAtMs,
     finishedAtMs: run.finishedAtMs,
     nodes,
+    state: buildRunState(store, runId, undefined, false),
     phase,
     error: run.errorJson ? (JSON.parse(run.errorJson) as { name: string; message: string }) : null,
     stats,
   };
+}
+
+export function buildRunState(
+  store: JournalStore,
+  runId: string,
+  namespace?: string,
+  resolveArtifacts = true,
+): RunStateSnapshot {
+  const snapshot: RunStateSnapshot = {};
+  for (const row of store.getRunState(runId, namespace)) {
+    let values = snapshot[row.namespace];
+    if (!values) {
+      values = {};
+      snapshot[row.namespace] = values;
+    }
+    if (row.valueArtifact) {
+      const artifact = store.getArtifact(row.valueArtifact);
+      if (!artifact) {
+        throw new Error(
+          `artifact ${row.valueArtifact} missing for state ${row.namespace}.${row.name}`,
+        );
+      }
+      if (resolveArtifacts && artifact.byteLen <= MAX_RUN_STATE_VALUE_BYTES) {
+        const data = store.getArtifactData(row.valueArtifact);
+        if (!data) {
+          throw new Error(
+            `artifact ${row.valueArtifact} missing for state ${row.namespace}.${row.name}`,
+          );
+        }
+        values[row.name] = JSON.parse(new TextDecoder().decode(data));
+      } else {
+        values[row.name] = { $artifact: row.valueArtifact, byteLen: artifact.byteLen };
+      }
+    } else if (row.valueInline !== null) {
+      values[row.name] = JSON.parse(row.valueInline);
+    }
+  }
+  return snapshot;
 }
 
 export function listScheduleSummaries(

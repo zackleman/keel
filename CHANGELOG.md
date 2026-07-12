@@ -76,6 +76,11 @@
   ([#22](https://github.com/kcosr/keel/pull/22))
 
 ### Added
+- Added run-scoped `ctx.state` namespaces with journaled whole-value writes,
+  synchronous deterministic fold reads, replay-safe rewind/fork behavior, schema
+  migration 22→23, bounded `RunProjection.state`, `getRunState` RPC, and MCP
+  `get_state`. The autoresearch workflow now stores its best candidate and
+  history in state. This rides the unreleased workflow SDK ABI 13.
 - Added a deterministic autoresearch supervised-loop workflow and repeatable live-daemon chaos matrix covering SIGKILL recovery, delayed timer restart, MCP steering and approval, suffix-only source invalidation, and durable checkpoint cursor resume.
 - Added `ctx.drainSignals<T>(key, name)` for non-parking, transactional FIFO
   consumption of all currently pending signals. Completed drains replay their

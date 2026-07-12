@@ -48,12 +48,42 @@ interface Steer {
   message: string;
 }
 
-interface HistoryEntry {
+type Candidate = { score: number; candidate: string; summary: string };
+
+type HistoryEntry = {
   iteration: number;
   accepted: boolean;
   result: { score: number; candidate: string; summary: string } | null;
   steers: Steer[];
-}
+};
+
+const HistorySchema = jsonSchema<HistoryEntry[]>({
+  type: "array",
+  items: {
+    type: "object",
+    additionalProperties: false,
+    required: ["iteration", "accepted", "result", "steers"],
+    properties: {
+      iteration: { type: "integer" },
+      accepted: { type: "boolean" },
+      result: {
+        anyOf: [
+          {
+            type: "object",
+            required: ["score", "candidate", "summary"],
+            properties: {
+              score: { type: "number" },
+              candidate: { type: "string" },
+              summary: { type: "string" },
+            },
+          },
+          { type: "null" },
+        ],
+      },
+      steers: { type: "array" },
+    },
+  },
+});
 
 export default async function autoresearch(ctx: Ctx, rawInput: unknown) {
   const input = Input.parse(rawInput);
@@ -66,16 +96,25 @@ export default async function autoresearch(ctx: Ctx, rawInput: unknown) {
     toolPolicy: "none",
   });
 
-  let best = {
-    score: setup.baselineScore,
-    candidate: "baseline",
-    summary: setup.hypothesis,
-  };
-  const history: HistoryEntry[] = [];
+  const research = ctx.state<{ best: Candidate; history: HistoryEntry[] }>("research", {
+    best: ExperimentResult,
+    history: HistorySchema,
+  });
+  await research.set({
+    key: "state.best.init",
+    name: "best",
+    value: {
+      score: setup.baselineScore,
+      candidate: "baseline",
+      summary: setup.hypothesis,
+    },
+  });
+  await research.set({ key: "state.history.init", name: "history", value: [] });
 
   ctx.phase("Experiment");
   for (let i = 0; i < input.iterations; i++) {
     const steers = await ctx.drainSignals<Steer>(ctx.stepKey("steer", String(i)), "steer");
+    const best = research.get("best")!;
     const lateInstruction =
       i === input.iterations - 1 ? "validate the final candidate" : "explore a candidate";
     const result = await ctx.agent({
@@ -94,19 +133,32 @@ export default async function autoresearch(ctx: Ctx, rawInput: unknown) {
     });
 
     const accepted = result !== null && result.score > best.score;
-    if (accepted) best = result;
-    history.push({ iteration: i, accepted, result, steers });
+    if (accepted) {
+      await research.set({
+        key: ctx.stepKey("state.best", String(i)),
+        name: "best",
+        value: result,
+      });
+    }
+    await research.set({
+      key: ctx.stepKey("state.history", String(i)),
+      name: "history",
+      value: [...research.get("history")!, { iteration: i, accepted, result, steers }],
+    });
 
     await ctx.checkpoint({
       key: ctx.stepKey("checkpoint", String(i)),
       message: `iteration ${i}: ${accepted ? "kept" : "reverted"}`,
-      data: { iteration: i, accepted, best, result, steers },
+      data: { iteration: i, accepted, best: research.get("best")!, result, steers },
     });
 
     if (i < input.iterations - 1 && input.cooldownMs > 0) {
       await ctx.sleep(ctx.stepKey("cooldown", String(i)), input.cooldownMs);
     }
   }
+
+  const { best, history } = research.snapshot();
+  if (!best || !history) throw new Error("research state was not initialized");
 
   ctx.phase("Record");
   const recorder = await ctx.agent({

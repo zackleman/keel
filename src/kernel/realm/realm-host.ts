@@ -3549,6 +3549,38 @@ export class RealmKernel {
               reply(m.id, {});
               break;
             }
+            case "state-write": {
+              let begun: ReturnType<StepEngine["beginStateWrite"]>;
+              try {
+                begun = engine.beginStateWrite(
+                  m.state.stableKey,
+                  m.state.identity,
+                  m.version,
+                  m.state.namespace,
+                  m.state.name,
+                );
+              } catch (err) {
+                replyError(m.id, err);
+                break;
+              }
+              if (begun.kind === "replay") {
+                reply(m.id, { value: begun.value });
+                break;
+              }
+              this.onStepExecute?.(m.state.stableKey);
+              engine.completeStateWrite(
+                m.state.stableKey,
+                begun.attempt,
+                m.version,
+                begun.inputHash,
+                begun.startedAtMs,
+                m.state.namespace,
+                m.state.name,
+                m.state.value,
+              );
+              reply(m.id, { value: m.state.value });
+              break;
+            }
             case "drain-signals": {
               let begun: ReturnType<StepEngine["beginDrainSignals"]>;
               try {

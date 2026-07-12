@@ -97,6 +97,7 @@ function failedRun(): RunProjection {
     finishedAtMs: 2,
     error: { name: "Error", message: "failed" },
     stats: { steps: 1, agents: 1, checkpointCount: 0, artifacts: 0 },
+    state: {},
     nodes: [
       {
         stableKey: "plan",

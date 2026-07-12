@@ -104,6 +104,7 @@ function run(
       parentRunId: null,
       createdAtMs,
       finishedAtMs: null,
+      state: {},
       nodes: [
         {
           stableKey: "step",

@@ -123,12 +123,38 @@ export class StepEngine {
     return this.beginStrictEffect(key, inputs, version, deps, "drain_signals");
   }
 
+  beginStateWrite(
+    key: string,
+    inputs: Json,
+    version: string,
+    namespace: string,
+    name: string,
+  ): BeginResult {
+    const begun = this.beginStrictEffect(key, inputs, version, null, "state_write");
+    if (begun.kind === "replay") {
+      const row = this.store.getLatestAttempt(this.runId, key);
+      if (!row || row.status !== "completed") {
+        throw new Error(`completed state_write "${key}" is missing its journal row`);
+      }
+      this.store.putStateRow({
+        runId: this.runId,
+        namespace,
+        name,
+        valueInline: row.resultInline,
+        valueArtifact: row.resultArtifact,
+        writtenKey: `${key}#${row.attempt}`,
+        updatedAtMs: this.host.clock(),
+      });
+    }
+    return begun;
+  }
+
   private beginStrictEffect(
     key: string,
     inputs: Json,
     version: string,
     deps: InputDep[] | null,
-    effectType: "command" | "completion_check" | "checkpoint" | "drain_signals",
+    effectType: "command" | "completion_check" | "checkpoint" | "drain_signals" | "state_write",
   ): BeginResult {
     const inputHash = hashJson(inputs);
     const existing = this.store.getLatestAttempt(this.runId, key);
@@ -228,6 +254,40 @@ export class StepEngine {
     return batch;
   }
 
+  completeStateWrite(
+    key: string,
+    attempt: number,
+    version: string,
+    inputHash: string,
+    startedAtMs: number,
+    namespace: string,
+    name: string,
+    value: Json,
+  ): void {
+    this.commitStep(
+      key,
+      attempt,
+      version,
+      inputHash,
+      startedAtMs,
+      () => value,
+      null,
+      "state_write",
+      [],
+      (stored) => {
+        this.store.putStateRow({
+          runId: this.runId,
+          namespace,
+          name,
+          valueInline: stored.inline,
+          valueArtifact: stored.artifact?.hash ?? null,
+          writtenKey: `${key}#${attempt}`,
+          updatedAtMs: this.host.clock(),
+        });
+      },
+    );
+  }
+
   private commitStep(
     key: string,
     attempt: number,
@@ -238,6 +298,7 @@ export class StepEngine {
     deps: InputDep[] | null,
     effectType: EffectType,
     events: Array<{ type: string; payload: Json }> = [],
+    materialize?: (stored: ReturnType<typeof prepareStepResult>) => void,
   ): void {
     this.host.fault?.("before-commit", key);
     const existing = this.store.getJournalRow(this.runId, key, attempt);
@@ -249,6 +310,7 @@ export class StepEngine {
       if (stored.artifact) {
         this.store.putArtifact(stored.artifact.hash, stored.artifact.bytes, this.host.clock());
       }
+      materialize?.(stored);
       for (const event of events) {
         this.store.appendEvent(this.runId, event.type, event.payload, this.host.clock());
       }

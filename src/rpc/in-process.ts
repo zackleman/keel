@@ -88,6 +88,7 @@ import {
   type ScheduleView,
   buildProjection,
   buildRunReport,
+  buildRunState,
   buildScheduleView,
   getBlockage,
   isVisibleBlockage,
@@ -455,6 +456,11 @@ export class InProcessKeel implements KeelApi {
 
   getRun(runId: string): RunProjection | null {
     return buildProjection(this.store, runId);
+  }
+
+  getRunState(runId: string, namespace?: string) {
+    if (!this.store.getRun(runId)) return null;
+    return buildRunState(this.store, runId, namespace);
   }
 
   getRunReport(runId: string): RunReport | null {

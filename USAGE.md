@@ -1017,6 +1017,9 @@ versioning and can cause affected steps to re-run.
 | `agentSession(spec)` | Realm-only logical agent participant with multiple durable `.turn(...)` calls in one backend conversation. |
 | `command(spec)` | Journaled host-side command in an explicit workspace. Completed command results replay; pending commands may run again after crash. |
 | `completionCheck(spec)` | Journaled host-side completion gate in an explicit workspace. Used by curated implement/review workflows. |
+| `checkpoint(spec)` | Journaled, non-parking durable progress. |
+| `state(namespace, schemas?)` | Open a run-scoped state handle with journaled writes and synchronous fold reads. |
+| `drainSignals(key, name)` | Atomically consume all currently pending signals without parking. |
 | `now()` / `random()` | Journaled wall-clock and entropy. Recorded once, replayed thereafter. |
 | `sleep(key, ms)` | Durable sleep. Parks the run until the supervisor wakes it. |
 | `human(spec)` | Park until a human approval/denial is delivered. |
@@ -1623,6 +1626,32 @@ the payload on the checkpoint node as `checkpoint: { message, data }` and
 includes `stats.checkpointCount`. Checkpoint events use the normal monotonic
 per-run cursor and are backfilled by `keel watch`; the dedicated text rendering
 of checkpoints is deferred, so use NDJSON when consuming the payload directly.
+
+### Run-scoped state
+
+```ts
+const research = ctx.state<{ best: Candidate; history: HistoryEntry[] }>("research", {
+  best: CandidateSchema,
+  history: HistorySchema,
+});
+await research.set({ key: "state.best.init", name: "best", value: baseline });
+const best = research.get("best");       // synchronous
+const snapshot = research.snapshot();   // synchronous
+```
+
+`ctx.state(namespace, schemas?)` is a pure handle. Only `set({ key, name, value })`
+is journaled; `get(name)` and `snapshot()` synchronously read the deterministic
+last-writer-wins fold of writes encountered in the current execution pass. Values
+and optional schema structure participate in write identity, so changed values
+re-execute rather than replay stale state. Namespace and entry names are non-empty,
+at most 128 characters, and may not start with `__`.
+
+State is scoped to one run. Rewind clears its materialized snapshot and the next
+resume rebuilds it from surviving journal writes; forks start empty until first
+resume. `continueAsNew` does not carry state—pass `snapshot()` in successor input.
+Avoid concurrent writers to the same namespace/name. Supervisors read bounded state
+through `RunProjection.state`, daemon `getRunState`, or MCP `get_state`; supervisor
+writes are not supported.
 
 ### Durable Sleep
 

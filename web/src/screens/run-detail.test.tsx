@@ -326,6 +326,7 @@ function detail(seq = 5): RunDetailResponse {
       parentRunId: null,
       createdAtMs: 1,
       finishedAtMs: null,
+      state: {},
       nodes: [
         {
           stableKey: "step_a",

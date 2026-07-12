@@ -78,6 +78,7 @@ ctx.agentSession(spec).turn(spec)     // realm-only multi-turn logical agent; se
 ctx.command(spec)                     // durable bounded host command; see §4.3
 ctx.completionCheck(spec)             // durable host completion gate for curated workflows
 ctx.checkpoint({ key, message, data? }) // durable, ordered progress; await persistence
+ctx.state(namespace, schemas?)          // run-scoped LWW state; journaled set, synchronous get/snapshot
 ctx.step(key, schema, inputs, fn)     // pure compute; memoized & re-run only if inputs/code change
 ctx.now() / ctx.random()              // the only time / randomness allowed
 ctx.sleep(key, ms)                    // durable pause
@@ -95,6 +96,12 @@ from an array index.
 Await `ctx.checkpoint` where progress becomes durable. Its `message` and optional
 JSON `data` are part of effect identity; completed checkpoints replay without
 duplicating their durable events.
+
+Use `const s = ctx.state<S>("namespace", schemas)` for observable run-scoped
+state. Await `s.set({ key, name, value })`; `s.get(name)` and `s.snapshot()`
+are synchronous reads of writes already encountered in the current pass. Use
+stable author keys, include whole JSON values, and keep one logical writer per
+entry. State does not carry through `continueAsNew`; pass the snapshot in input.
 
 ## 4. Calling an agent (`ctx.agent`)
 
