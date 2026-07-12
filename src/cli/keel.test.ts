@@ -120,6 +120,7 @@ describe("keel CLI", () => {
       expect(out.stdout).toContain("Usage: keel <command>");
       expect(out.stdout).toContain("list [--output text|json]");
       expect(out.stdout).toContain("tui [runId] [--status status] [--limit n] [--output text]");
+      expect(out.stdout).toContain("mcp");
       expect(out.stdout).toContain("interrupt <runId> [reason]");
     } finally {
       rmSync(dir, { recursive: true, force: true });

@@ -175,6 +175,7 @@ bun src/cli/keel.ts <command> [args]
 | `workspace list/show/diff/merge/discard/gc ...` | Inspect and manage retained isolated agent/session workspaces by `workspaceId`. |
 | `tui [runId] [--status status] [--limit n] [--output text]` | Open an interactive run browser or direct run detail/watch view. Browser mode requires admin. |
 | `web [--host 127.0.0.1] [--port 7879] [--socket path] [--assets dir] [--api-only]` | Serve the local browser API transport. |
+| `mcp` | Serve supervisor tools over stdio, using the configured daemon socket and credential chain. |
 | `gc` | Prune unreferenced workflow definition rows and cache entries. Requires admin. |
 | `resume [--detach] [--tools] <runId>` | Resume a parked, interrupted, or incomplete run. Watches by default. |
 | `interrupt <runId> [reason]` | Stop active work and park a non-terminal run until explicit `resume`. |
@@ -311,6 +312,20 @@ event clients must use `fetch()` with a readable response stream so the header
 can be sent; native `EventSource` with query-string tokens is not supported.
 The web transport treats captured-source `launchRun` as admin-only even though
 it remains open on the trusted local Unix socket.
+
+### Supervisor MCP Server
+
+`keel mcp` starts the local stdio supervisor server. It connects to
+`KEEL_SOCKET` or `$KEEL_DIR/keel.sock` and requires one credential from
+`KEEL_ADMIN_TOKEN`, `KEEL_RUN_CAP`, or `KEEL_CAP_FILE`. It writes MCP protocol
+frames to stdout, so do not wrap it with commands that add stdout logging.
+
+Use an admin credential for the complete tool set. A run credential provides a
+least-privilege instance limited to that run and cannot list runs or decide
+human approvals. Event-tail tools return bounded durable pages with a numeric
+`nextCursor`; persist it and pass it back as `afterSeq` to avoid gaps or
+duplicates. See [`docs/mcp.md`](./docs/mcp.md) for configuration, tool shapes,
+and the supervisor polling pattern.
 
 ### Attach And Detach Behavior
 
@@ -852,6 +867,10 @@ an admin capability. Admin is required for daemon-wide `list` and
 `approve`/`deny` of `ctx.human` gates. Raw run capabilities are printed only
 with explicit `--emit-capability`; avoid this in transcripts unless you intend
 to handle the token as a secret.
+
+`keel mcp` uses the same credential precedence and redacts capability-looking
+values from tool output. `launch_saved_workflow` returns only the new `runId`,
+never its minted run capability.
 
 Socket `authenticate` records the credential for later requests on that
 connection. It does not validate by itself; protected daemon methods return the

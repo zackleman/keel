@@ -11,6 +11,7 @@
 //   keel list [--output text|json]      list runs
 //   keel tui [runId]                   interactive run browser/detail/watch
 //   keel web                           start the local browser API transport
+//   keel mcp                           start the supervisor MCP server over stdio
 //
 // Socket + db paths default under ~/.keel (override with KEEL_SOCKET / KEEL_DB).
 
@@ -41,6 +42,7 @@ import { DaemonClient } from "../daemon/client.ts";
 import { KeelDaemon } from "../daemon/server.ts";
 import { runExecuteScript } from "../execute/runtime.ts";
 import { JournalStore } from "../journal/store.ts";
+import { runMcpServer } from "../mcp/server.ts";
 import type {
   AgentProfileCheckResult,
   AgentProfileView,
@@ -155,6 +157,7 @@ const COMMANDS: [string, string, string][] = [
     "[--host 127.0.0.1] [--port 7879] [--socket path] [--assets dir] [--api-only]",
     "serve the local browser API transport",
   ],
+  ["mcp", "", "serve supervisor tools over MCP stdio"],
   ["schedule", "put|list|show ...", "create and inspect cron schedules"],
   ["profiles", "list|get|set|delete|check ...", "manage persistent agent profile catalog"],
   ["settings", "list|get|set|unset|check ...", "manage daemon settings catalog"],
@@ -309,6 +312,10 @@ async function dispatch(argv: string[]): Promise<number> {
         process.exit(0);
       });
       await new Promise(() => {});
+      return 0;
+    }
+    case "mcp": {
+      await runMcpServer({ socketPath: SOCKET });
       return 0;
     }
     case "launch": {
