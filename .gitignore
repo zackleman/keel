@@ -4,3 +4,8 @@ node_modules/
 .cnvs/
 dist/
 .agent-pack/
+
+# Smithers run store (ephemeral — never commit)
+smithers.db
+smithers.db-shm
+smithers.db-wal
