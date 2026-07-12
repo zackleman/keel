@@ -125,8 +125,15 @@ Phases 1+3 should land together on one ABI bump if possible (both are small ctx 
 >   optional/skip). Operational notes recorded: wait_for_run returns at sleep/human parks
 >   (supervisors poll watch_run); MCP launches saved workflows but doesn't save them;
 >   agentSession runs reject source-override reruns (keyed ctx.agent is the workload shape).
-> - **Gate passed — Phases 5–7 unblocked.** Next: Phase 5 design doc (review-gated before
->   build), then Phase 8 before any remote exposure.
+> - Phase 5: design doc `docs/designs/ctx-state-design.md` (user-approved 2026-07-12);
+>   build `2d79fc0` (feat/ctx-state) — strict-effect `ctx.state` with sync fold reads,
+>   schema migration 22→23 (state table materialized in the commit transaction,
+>   replay-touch rebuild, rewind/fork self-healing), bounded projection state,
+>   `getRunState` RPC, MCP `get_state` (13th tool), autoresearch best/history rewritten to
+>   ctx.state, ordering-trap regression test. Rides ABI 13. No design deviations.
+>   Phase 5b (agent-side state tools) remains future work.
+> - Next: Phase 6 (`ctx.spawn`), then Phase 8 before any remote exposure. Phase 7 skipped
+>   (Phase 4 produced no evidence Tier-2 injection is needed).
 
 ### Phase 0 status (recorded 2026-07-11)
 
