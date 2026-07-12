@@ -805,7 +805,7 @@ describe("RPC contract drives a workflow end-to-end", () => {
       expect(projection?.status).toBe("finished");
       expect(projection?.workflowName).toBe("review");
       expect(projection?.phase).toBe("Review");
-      expect(projection?.stats).toEqual({ steps: 1, agents: 2, artifacts: 0 });
+      expect(projection?.stats).toEqual({ steps: 1, agents: 2, checkpointCount: 0, artifacts: 0 });
       // nodes: one pure (count) + two effectful (review:auth, review:net)
       expect(projection?.nodes.map((n) => n.stableKey)).toEqual([
         "count",
@@ -817,7 +817,7 @@ describe("RPC contract drives a workflow end-to-end", () => {
       const report = api.getRunReport(runId);
       expect(report?.workflowName).toBe("review");
       expect(report?.status).toBe("finished");
-      expect(report?.stats).toEqual({ steps: 1, agents: 2, artifacts: 0 });
+      expect(report?.stats).toEqual({ steps: 1, agents: 2, checkpointCount: 0, artifacts: 0 });
       expect(report?.nodes.map((n) => [n.stableKey, n.result])).toEqual([
         ["count", 3],
         ["review:auth", { findings: [{ title: "a" }] }],
@@ -926,6 +926,7 @@ describe("projection is golden-locked", () => {
             startedAtMs: 1,
             dependsOn: [],
             artifactBacked: false,
+            checkpoint: null,
           },
           {
             stableKey: "s1",
@@ -935,6 +936,7 @@ describe("projection is golden-locked", () => {
             startedAtMs: 1,
             dependsOn: [],
             artifactBacked: false,
+            checkpoint: null,
           },
           {
             stableKey: "s2",
@@ -944,9 +946,10 @@ describe("projection is golden-locked", () => {
             startedAtMs: 1,
             dependsOn: [],
             artifactBacked: false,
+            checkpoint: null,
           },
         ],
-        stats: { steps: 3, agents: 0, artifacts: 0 },
+        stats: { steps: 3, agents: 0, checkpointCount: 0, artifacts: 0 },
       });
     },
     WORKFLOW_TEST_TIMEOUT_MS,

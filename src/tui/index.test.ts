@@ -325,7 +325,7 @@ function projection(runId: string): RunProjection {
     nodes: [],
     phase: null,
     error: null,
-    stats: { steps: 0, agents: 0, artifacts: 0 },
+    stats: { steps: 0, agents: 0, checkpointCount: 0, artifacts: 0 },
   };
 }
 
@@ -338,7 +338,7 @@ function report(runId: string): RunReport {
     finishedAtMs: null,
     error: null,
     nodes: [],
-    stats: { steps: 0, agents: 0, artifacts: 0 },
+    stats: { steps: 0, agents: 0, checkpointCount: 0, artifacts: 0 },
   };
 }
 

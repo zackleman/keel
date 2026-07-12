@@ -125,6 +125,7 @@ describe("layoutFlow", () => {
         startedAtMs: 10,
         dependsOn: [],
         artifactBacked: false,
+        checkpoint: null,
       },
     ];
 

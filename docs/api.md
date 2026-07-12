@@ -99,6 +99,9 @@ See `docs/control-surfaces.md` for the cross-surface status matrix.
   `after-seq`, `tail`, and `now` cursors, then tails new durable events and live
   ephemeral frames after catch-up.
 - Late subscribers do not receive past ephemeral frames.
+- Completed `ctx.checkpoint` calls appear as canonical projection nodes with a
+  `checkpoint: { message, data }` payload and append a durable `checkpoint`
+  event in the same transaction as checkpoint completion.
 
 `keel watch --output text` and the TUI format event streams for humans; scripts
 should prefer JSON/NDJSON or direct API calls.

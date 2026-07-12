@@ -210,6 +210,7 @@ The prior-runtime defects that shaped Keel map to these requirements:
 | **Command effect** | `ctx.command(spec)` — bounded host-side process execution in an explicit workspace. | Validate workspace/cwd/capabilities/env, write pending row, acquire the workspace holder, run the command, persist bounded result. | Matching completed commands replay without spawning. Matching pending commands may spawn again under at-least-once crash/retry semantics. Pending identity mismatches fail closed. | `command` |
 | **Workspace setup** | `ctx.workspace({ setup })` — bounded host-side preparation commands attached to an explicit workspace. | Resolve/create the workspace, compute setup identity, mark setup pending, run setup commands sequentially, persist bounded command diagnostics, then mark the workspace ready. | Matching completed setup is reused for the same run-scoped workspace. Pending setup commands may run again after crash; failed setup fails later workspace resolution. | `workspace_setup` |
 | **Completion check effect** | `ctx.completionCheck(spec)` — host-side command/git gate for curated workflow completion. | Validate workspace row and check identity, write pending row, acquire the workspace holder, run the check, persist bounded result and events. | Matching completed checks replay. New completion attempts use new keys and observe current workspace/git/remote state. Pending identity mismatches fail closed. | `completion_check` |
+| **Checkpoint effect** | `ctx.checkpoint({ key, message, data? })` — durable, non-parking progress. | Write a strict pending row, then transactionally commit the payload result and one durable `checkpoint` event. | Matching completed checkpoints replay without another event. Matching pending checkpoints re-execute; pending identity mismatches fail closed. | `checkpoint` |
 | **Ambient** | `ctx.now()`, `ctx.random()`, `ctx.sleep()`. | Generate/record once. | Replay the recorded value (`sleep`: already-elapsed if the wake time passed). | `ambient` |
 
 Plain code *between* `ctx.*` calls (loops, `if`, dedupe logic) is not journaled.
@@ -654,6 +655,9 @@ interface Ctx {
   agent<T>(spec: AgentSpec<T>): Promise<T>;
 
   agentSession(spec: AgentSessionSpec): AgentSession;
+
+  // Durable ordered progress; awaits journal + event persistence and never parks.
+  checkpoint(spec: { key: string; message: string; data?: Json }): Promise<void>;
 
   // Journaled non-determinism — the ONLY time/entropy in realm scope.
   now(): number;

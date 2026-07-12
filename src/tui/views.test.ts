@@ -28,7 +28,7 @@ const projection: RunProjection = {
   finishedAtMs: null,
   phase: "working",
   error: null,
-  stats: { steps: 1, agents: 0, artifacts: 0 },
+  stats: { steps: 1, agents: 0, checkpointCount: 0, artifacts: 0 },
   nodes: [
     {
       stableKey: "step.one",
@@ -38,6 +38,7 @@ const projection: RunProjection = {
       startedAtMs: 1,
       dependsOn: [],
       artifactBacked: false,
+      checkpoint: null,
     },
   ],
 };
@@ -160,6 +161,7 @@ describe("tui views", () => {
           startedAtMs: index + 1,
           dependsOn: [],
           artifactBacked: false,
+          checkpoint: null,
         })),
       },
       report: null,

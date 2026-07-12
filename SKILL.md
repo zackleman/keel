@@ -77,6 +77,7 @@ ctx.agent(spec)                       // call an LLM agent (the real work); see 
 ctx.agentSession(spec).turn(spec)     // realm-only multi-turn logical agent; see §4.1
 ctx.command(spec)                     // durable bounded host command; see §4.2
 ctx.completionCheck(spec)             // durable host completion gate for curated workflows
+ctx.checkpoint({ key, message, data? }) // durable, ordered progress; await persistence
 ctx.step(key, schema, inputs, fn)     // pure compute; memoized & re-run only if inputs/code change
 ctx.now() / ctx.random()              // the only time / randomness allowed
 ctx.sleep(key, ms)                    // durable pause
@@ -89,6 +90,10 @@ ctx.log(msg) / ctx.phase(title)       // narration
 **Fan out with `Promise.all`** over `ctx.agent`/`ctx.step`. Keys must be stable per
 run — derive fan-out keys from content: `ctx.stepKey("verify", finding.id)`, never
 from an array index.
+
+Await `ctx.checkpoint` where progress becomes durable. Its `message` and optional
+JSON `data` are part of effect identity; completed checkpoints replay without
+duplicating their durable events.
 
 ## 4. Calling an agent (`ctx.agent`)
 

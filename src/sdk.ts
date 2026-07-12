@@ -23,6 +23,7 @@ export type {
   CompletionCheckResult,
   CompletionCheckStatus,
   CompletionCheckTrigger,
+  CheckpointSpec,
   Ctx,
   GitCleanCompletionCheck,
   HasCommitsCompletionCheck,

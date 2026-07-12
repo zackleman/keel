@@ -113,11 +113,12 @@ function run(
           startedAtMs: createdAtMs,
           dependsOn: [],
           artifactBacked: false,
+          checkpoint: null,
         },
       ],
       phase: null,
       error: null,
-      stats: { steps: 1, agents: 0, artifacts: 0 },
+      stats: { steps: 1, agents: 0, checkpointCount: 0, artifacts: 0 },
     },
     blockage: blockageReason
       ? {

@@ -3507,6 +3507,48 @@ export class RealmKernel {
               })();
               break;
             }
+            case "checkpoint": {
+              let begun: ReturnType<StepEngine["beginCheckpoint"]>;
+              try {
+                begun = engine.beginCheckpoint(
+                  m.checkpoint.stableKey,
+                  m.checkpoint.identity,
+                  m.version,
+                  null,
+                );
+              } catch (err) {
+                replyError(m.id, err);
+                break;
+              }
+              if (begun.kind === "replay") {
+                reply(m.id, {});
+                break;
+              }
+              this.onStepExecute?.(m.checkpoint.stableKey);
+              engine.completeStep(
+                m.checkpoint.stableKey,
+                begun.attempt,
+                m.version,
+                begun.inputHash,
+                begun.startedAtMs,
+                m.checkpoint.result,
+                null,
+                "checkpoint",
+                [
+                  {
+                    type: "checkpoint",
+                    payload: {
+                      stableKey: m.checkpoint.stableKey,
+                      attempt: begun.attempt,
+                      message: m.checkpoint.message,
+                      data: m.checkpoint.data,
+                    },
+                  },
+                ],
+              );
+              reply(m.id, {});
+              break;
+            }
             case "command": {
               let workspace: CommandWorkspace;
               let invocationEnv: Record<string, string>;

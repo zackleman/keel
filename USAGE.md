@@ -1580,6 +1580,31 @@ choice is only cwd/lifecycle selection, not a secret boundary.
 
 ## Durability Features
 
+### Checkpoints
+
+```ts
+await ctx.checkpoint({
+  key: ctx.stepKey("progress", item.id),
+  message: "Reviewed item",
+  data: { itemId: item.id, completed, total },
+});
+```
+
+`ctx.checkpoint({ key, message, data? })` journals a non-parking progress frame.
+The returned promise resolves only after the checkpoint row and its durable event
+are committed, so awaiting checkpoints preserves workflow order. Completed
+checkpoints replay without emitting another event; a crash before completion
+leaves the pending checkpoint eligible for re-execution with the same identity.
+Changing `message` or `data` changes the input identity, and changing either
+while the same checkpoint attempt is pending fails closed.
+
+Each completed checkpoint emits one durable `checkpoint` event with
+`{ stableKey, attempt, message, data }`. The canonical run projection exposes
+the payload on the checkpoint node as `checkpoint: { message, data }` and
+includes `stats.checkpointCount`. Checkpoint events use the normal monotonic
+per-run cursor and are backfilled by `keel watch`; the dedicated text rendering
+of checkpoints is deferred, so use NDJSON when consuming the payload directly.
+
 ### Durable Sleep
 
 ```ts

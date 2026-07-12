@@ -574,7 +574,7 @@ describe("daemon multi-client over the socket", () => {
       expect(out.output).toBe(3);
 
       const projection = await b.getRun(runId);
-      expect(projection?.stats).toEqual({ steps: 3, agents: 0, artifacts: 0 });
+      expect(projection?.stats).toEqual({ steps: 3, agents: 0, checkpointCount: 0, artifacts: 0 });
       await a.authenticate(ADMIN_TOKEN);
       const runs = await a.listRuns();
       expect(Array.isArray(runs)).toBe(true);

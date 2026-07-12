@@ -1,4 +1,5 @@
 import type { AgentConcurrencyWaitSnapshot } from "../agents/concurrency";
+import type { Json } from "../hash";
 import type { EffectType, JournalStatus, RunStatus } from "../journal/types";
 
 export type { AgentConcurrencyWaitSnapshot };
@@ -15,11 +16,14 @@ export interface NodeView {
   dependsOn: string[];
   /** True if the result is stored as an artifact rather than inline. */
   artifactBacked: boolean;
+  /** Durable progress payload for completed checkpoint nodes. */
+  checkpoint: { message: string; data: Json } | null;
 }
 
 export interface RunStats {
   steps: number;
   agents: number;
+  checkpointCount: number;
   artifacts: number;
 }
 

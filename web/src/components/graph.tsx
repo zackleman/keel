@@ -1,6 +1,7 @@
 import {
   Box,
   CircleCheck,
+  Flag,
   FolderCog,
   Globe,
   type LucideIcon,
@@ -32,6 +33,7 @@ const EFFECT_ICON = {
   effectful: Zap,
   command: Terminal,
   completion_check: CircleCheck,
+  checkpoint: Flag,
   workspace_setup: FolderCog,
   ambient: Globe,
 } satisfies Record<EffectType, LucideIcon>;

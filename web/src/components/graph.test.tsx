@@ -8,6 +8,7 @@ const EFFECT_TYPE_FIXTURES = {
   effectful: true,
   command: true,
   completion_check: true,
+  checkpoint: true,
   workspace_setup: true,
   ambient: true,
 } satisfies Record<EffectType, true>;
@@ -37,5 +38,6 @@ function node(effectType: EffectType, index: number): NodeView {
     startedAtMs: 1_000 + index,
     dependsOn: [],
     artifactBacked: false,
+    checkpoint: null,
   };
 }

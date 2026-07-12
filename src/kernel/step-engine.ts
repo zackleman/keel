@@ -10,7 +10,7 @@ import type { TraceEvent } from "../agents/types.ts";
 import { type Json, hashJson, sha256Hex } from "../hash.ts";
 import type { JournalStore } from "../journal/store.ts";
 import type { EffectType, InputDep, JournalRow } from "../journal/types.ts";
-import { type DurableAgentEvent, durableAgentToolEvent } from "./agent-events.ts";
+import { durableAgentToolEvent } from "./agent-events.ts";
 import type { CtxHost } from "./ctx.ts";
 
 /** Results larger than this are stored content-addressed, not inline (§8.2). */
@@ -105,12 +105,21 @@ export class StepEngine {
     return this.beginStrictEffect(key, inputs, version, deps, "completion_check");
   }
 
+  beginCheckpoint(
+    key: string,
+    inputs: Json,
+    version: string,
+    deps: InputDep[] | null,
+  ): BeginResult {
+    return this.beginStrictEffect(key, inputs, version, deps, "checkpoint");
+  }
+
   private beginStrictEffect(
     key: string,
     inputs: Json,
     version: string,
     deps: InputDep[] | null,
-    effectType: "command" | "completion_check",
+    effectType: "command" | "completion_check" | "checkpoint",
   ): BeginResult {
     const inputHash = hashJson(inputs);
     const existing = this.store.getLatestAttempt(this.runId, key);
@@ -169,7 +178,7 @@ export class StepEngine {
     value: unknown,
     deps: InputDep[] | null,
     effectType: EffectType = "pure",
-    events: DurableAgentEvent[] = [],
+    events: Array<{ type: string; payload: Json }> = [],
   ): void {
     this.host.fault?.("before-commit", key);
     const existing = this.store.getJournalRow(this.runId, key, attempt);

@@ -8,6 +8,7 @@ import type { JournalStore } from "../journal/store.ts";
 import type { RunRow, ScheduleRow } from "../journal/types.ts";
 import { isRunOwnerStale, ownerStaleWindowMs } from "../kernel/liveness.ts";
 import { RUN_FINISHED_INLINE_OUTPUT_BYTES } from "../kernel/output.ts";
+import { readJournalResult } from "../kernel/step-engine.ts";
 import { workflowDefinitionSourceSelection } from "../workflow-definitions/source-view.ts";
 import type {
   Blockage,
@@ -70,6 +71,10 @@ export function buildProjection(store: JournalStore, runId: string): RunProjecti
       startedAtMs: r.startedAtMs,
       dependsOn: (r.inputDeps ?? []).map((d) => d.stepKey).sort(),
       artifactBacked: r.resultArtifact !== null,
+      checkpoint:
+        r.effectType === "checkpoint" && r.status === "completed"
+          ? (readJournalResult(store, r) as NodeView["checkpoint"])
+          : null,
     }));
 
   let phase: string | null = null;
@@ -86,6 +91,7 @@ export function buildProjection(store: JournalStore, runId: string): RunProjecti
   const stats: RunStats = {
     steps: nodes.filter((n) => n.effectType === "pure").length,
     agents: nodes.filter((n) => n.effectType === "effectful").length,
+    checkpointCount: nodes.filter((n) => n.effectType === "checkpoint").length,
     artifacts: nodes.filter((n) => n.artifactBacked).length,
   };
 
@@ -215,6 +221,10 @@ export function buildRunReport(
         startedAtMs: r.startedAtMs,
         dependsOn: (r.inputDeps ?? []).map((d) => d.stepKey).sort(),
         artifactBacked: r.resultArtifact !== null,
+        checkpoint:
+          r.effectType === "checkpoint" && r.status === "completed"
+            ? (readJournalResult(store, r) as ReportNodeView["checkpoint"])
+            : null,
       };
       const result = resultJsonForReport(store, r.resultInline, r.resultArtifact);
       if (result.kind === "inline") node.result = JSON.parse(result.json);
@@ -248,6 +258,7 @@ export function buildRunReport(
     stats: {
       steps: nodes.filter((n) => n.effectType === "pure").length,
       agents: nodes.filter((n) => n.effectType === "effectful").length,
+      checkpointCount: nodes.filter((n) => n.effectType === "checkpoint").length,
       artifacts: nodes.filter((n) => n.artifactBacked).length,
     },
   };

@@ -16,6 +16,11 @@ are delivered only to currently connected subscribers. Live agent delta frames
 are ephemeral; finalized tool calls, tool results, and assistant messages are
 durable transcript rows.
 
+A completed `ctx.checkpoint` appends one durable `checkpoint` frame with
+`{ stableKey, attempt, message, data }`. The frame and completed checkpoint
+journal row commit in one transaction. Replaying a completed checkpoint does not
+append another frame; a pending checkpoint re-executes after a crash.
+
 ## Cursors
 
 Subscription APIs use a request object:

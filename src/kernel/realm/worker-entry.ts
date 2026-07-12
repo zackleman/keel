@@ -34,6 +34,7 @@ import type { WorkspaceRetention } from "../../journal/types.ts";
 import type { WorkflowVisibleSettings } from "../../settings/catalog.ts";
 import { requireRunTarget } from "../../target.ts";
 import { DEFAULT_WORKSPACE_ID } from "../../workspace/identity.ts";
+import { checkpointVersionIdentity, normalizeCheckpoint } from "../checkpoint.ts";
 import { CommandFailure, type CommandResult, normalizeWorkflowCommandSpec } from "../command.ts";
 import {
   type CompletionCheckResult,
@@ -752,6 +753,16 @@ const ctx = Object.freeze({
     const err = new Error(reply.error?.message ?? "completion check failed");
     err.name = reply.error?.name ?? "CompletionCheckFailure";
     throw err;
+  },
+  async checkpoint(rawSpec: unknown): Promise<void> {
+    const checkpoint = normalizeCheckpoint(rawSpec);
+    assertNotReservedAuthorKey(checkpoint.stableKey, "ctx.checkpoint");
+    const version = computeVersion({ spec: checkpointVersionIdentity() });
+    await rpc({
+      type: "checkpoint",
+      checkpoint,
+      version,
+    });
   },
   agentSession(rawSessionSpec: {
     key: string;

@@ -9,6 +9,7 @@ export type EffectType =
   | "effectful"
   | "command"
   | "completion_check"
+  | "checkpoint"
   | "workspace_setup"
   | "ambient";
 

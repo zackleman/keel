@@ -11,6 +11,7 @@ import type { NormalizedAgentEnvironment } from "../../agents/environment.ts";
 import type { ProviderConfigValue } from "../../agents/types.ts";
 import type { InputDep, WorkspaceRetention } from "../../journal/types.ts";
 import type { WorkflowVisibleSettings } from "../../settings/catalog.ts";
+import type { NormalizedCheckpoint } from "../checkpoint.ts";
 import type { CommandResult, NormalizedWorkflowCommandSpec } from "../command.ts";
 import type {
   CompletionCheckResult,
@@ -119,6 +120,12 @@ export type WorkerRequest =
       version: string;
       inputs: unknown;
       deps: InputDep[] | null;
+    }
+  | {
+      type: "checkpoint";
+      id: number;
+      checkpoint: NormalizedCheckpoint;
+      version: string;
     }
   | {
       type: "step-commit";

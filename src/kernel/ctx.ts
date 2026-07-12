@@ -39,6 +39,11 @@ import { DEFAULT_WORKSPACE_ID, workspaceIdentity } from "../workspace/identity.t
 import { resolveUsableDirectory } from "../workspace/worktree.ts";
 import { finalAgentMessageEvents } from "./agent-events.ts";
 import {
+  type CheckpointSpec,
+  checkpointVersionIdentity,
+  normalizeCheckpoint,
+} from "./checkpoint.ts";
+import {
   type CommandResult,
   type NormalizedWorkflowCommandSpec,
   type WorkflowCommandSpec,
@@ -84,6 +89,7 @@ export type {
   HasCommitsCompletionCheck,
   NormalizedCompletionCheck,
 } from "./completion-check.ts";
+export type { CheckpointSpec } from "./checkpoint.ts";
 export type { WorkspaceSetupCommand, WorkspaceSetupSpec } from "./workspace-setup.ts";
 
 const SESSION_STABLE_KEY_PREFIX = "__session.";
@@ -289,6 +295,9 @@ export interface Ctx {
   /** Durable host-side completion gate in an explicit workspace. */
   completionCheck(spec: CompletionCheckEffectSpec): Promise<CompletionCheckResult>;
 
+  /** Journal a durable, strictly ordered progress update. */
+  checkpoint(spec: CheckpointSpec): Promise<void>;
+
   /** Realm-only durable logical agent session. */
   agentSession(spec: AgentSessionSpec): AgentSession;
 
@@ -490,6 +499,36 @@ export class WorkflowCtx implements Ctx {
       this.engine.failStep(key, begun.attempt, version, begun.inputHash, begun.startedAtMs, err);
       throw err;
     }
+  }
+
+  async checkpoint(rawSpec: CheckpointSpec): Promise<void> {
+    const spec = normalizeCheckpoint(rawSpec);
+    assertNotReservedAuthorKey(spec.stableKey, "ctx.checkpoint");
+    const version = computeVersion({ spec: checkpointVersionIdentity() });
+    const begun = this.engine.beginCheckpoint(spec.stableKey, spec.identity, version, null);
+    if (begun.kind === "replay") return;
+
+    this.engine.completeStep(
+      spec.stableKey,
+      begun.attempt,
+      version,
+      begun.inputHash,
+      begun.startedAtMs,
+      spec.result,
+      null,
+      "checkpoint",
+      [
+        {
+          type: "checkpoint",
+          payload: {
+            stableKey: spec.stableKey,
+            attempt: begun.attempt,
+            message: spec.message,
+            data: spec.data,
+          },
+        },
+      ],
+    );
   }
 
   async agent<T>(rawSpec: AgentSpec<T>): Promise<T> {

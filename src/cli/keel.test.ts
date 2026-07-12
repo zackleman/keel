@@ -316,7 +316,7 @@ describe("keel CLI", () => {
       finishedAtMs: 2,
       output: "out\u001b[2J\nnext kc_run_secretValue",
       error: { name: "Error\u001b[31m", message: "bad\rthing" },
-      stats: { steps: 1, agents: 0, artifacts: 0 },
+      stats: { steps: 1, agents: 0, checkpointCount: 0, artifacts: 0 },
       nodes: [
         {
           stableKey: "step\u001b[31m.one\nkey",
@@ -326,6 +326,7 @@ describe("keel CLI", () => {
           startedAtMs: 1,
           dependsOn: [],
           artifactBacked: false,
+          checkpoint: null,
           result: "result\u0000value",
         },
       ],
@@ -952,12 +953,12 @@ describe("keel CLI", () => {
         const payload = JSON.parse(report.stdout) as {
           runId: string;
           output: number;
-          stats: { steps: number; agents: number; artifacts: number };
+          stats: { steps: number; agents: number; checkpointCount: number; artifacts: number };
           nodes: Array<{ stableKey: string; result: number; artifactBacked: boolean }>;
         };
         expect(payload.runId).toBe(runId);
         expect(payload.output).toBe(2);
-        expect(payload.stats).toEqual({ steps: 2, agents: 0, artifacts: 0 });
+        expect(payload.stats).toEqual({ steps: 2, agents: 0, checkpointCount: 0, artifacts: 0 });
         expect(payload.nodes.map((n) => [n.stableKey, n.result])).toEqual([
           ["s0", 1],
           ["s1", 2],
