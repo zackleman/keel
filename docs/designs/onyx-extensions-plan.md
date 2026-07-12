@@ -111,7 +111,14 @@ Phases 1+3 should land together on one ABI bump if possible (both are small ctx 
 >   zod bump. `tail_checkpoints` = name-filter over durable events; payload shape verified
 >   to match Phase 1's real emission post-merge.
 > - Merge: `4256a28` (one trivial CHANGELOG both-add conflict).
-> - Next: Phase 3 (`ctx.drainSignals`), then Phase 4 workload test gates 5–7.
+> - Phase 3: `5de4a96` (feat/drain-signals) — `ctx.drainSignals<T>(key, name)` strict-effect
+>   batch drain; FIFO consumption transactional with the journaled result (reuses
+>   `signals.consumed_key` with `<stableKey>#<attempt>` batch consumer — no schema
+>   migration); rewind restoration for discarded drain results; supervised-worker fixture +
+>   SKILL template. Stayed on ABI 13 (introduced by Phase 1 on this unreleased branch).
+>   Accepted deviation: SKILL template uses `turn_${i}` keys (agentSession turn keys
+>   reject `:` so `ctx.stepKey` output is invalid there).
+> - Next: Phase 4 workload test (gates 5–7).
 
 ### Phase 0 status (recorded 2026-07-11)
 
