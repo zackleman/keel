@@ -132,8 +132,12 @@ Phases 1+3 should land together on one ABI bump if possible (both are small ctx 
 >   `getRunState` RPC, MCP `get_state` (13th tool), autoresearch best/history rewritten to
 >   ctx.state, ordering-trap regression test. Rides ABI 13. No design deviations.
 >   Phase 5b (agent-side state tools) remains future work.
-> - Next: Phase 6 (`ctx.spawn`), then Phase 8 before any remote exposure. Phase 7 skipped
->   (Phase 4 produced no evidence Tier-2 injection is needed).
+> - Phase 6: `ctx.spawn` + `ctx.waitRun` strict effects with write-ahead child run ID
+>   reservation, saved-definition hash pinning, freshly attenuated child run capabilities,
+>   direct-child lineage, non-cascading parent interrupts, failure-as-result waits, MCP
+>   `children_of` filtering, and daemon kill/restart duplicate-prevention coverage. ABI 13→14.
+> - Next: Phase 8 before any remote exposure. Phase 7 skipped (Phase 4 produced no evidence
+>   Tier-2 injection is needed).
 
 ### Phase 0 status (recorded 2026-07-11)
 

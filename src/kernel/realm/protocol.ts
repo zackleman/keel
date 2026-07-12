@@ -17,6 +17,7 @@ import type {
   CompletionCheckResult,
   NormalizedCompletionCheckEffectSpec,
 } from "../completion-check.ts";
+import type { NormalizedSpawn } from "../spawn.ts";
 import type { NormalizedStateWrite } from "../state.ts";
 
 /** SAB layout: Int32 control[0] is the ambient handshake flag; Float64 holds
@@ -133,6 +134,20 @@ export type WorkerRequest =
       id: number;
       key: string;
       name: string;
+      inputs: unknown;
+      version: string;
+    }
+  | {
+      type: "spawn";
+      id: number;
+      spawn: NormalizedSpawn;
+      version: string;
+    }
+  | {
+      type: "wait-run";
+      id: number;
+      key: string;
+      childRunId: string;
       inputs: unknown;
       version: string;
     }

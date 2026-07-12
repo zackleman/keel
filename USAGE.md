@@ -930,9 +930,8 @@ reads, so they restore the execute control credential/admin capability.
 
 `execute` is not durable orchestration. It can be re-invoked with non-secret
 state handles, but durable pauses belong in workflow code via `ctx.human`,
-`ctx.signal`, and `ctx.sleep`. Saved workflows are implemented as daemon-pinned
-workflow definitions; saved tasks, durable task pause/re-entry, and durable child
-workflow spawning (`ctx.spawn`) are deferred.
+`ctx.signal`, and `ctx.sleep`. Saved workflows and durable child workflows
+use the daemon registry and `ctx.spawn`; saved task pause/re-entry remains deferred.
 
 ### Diagnostics
 
@@ -1653,6 +1652,36 @@ Avoid concurrent writers to the same namespace/name. Supervisors read bounded st
 through `RunProjection.state`, daemon `getRunState`, or MCP `get_state`; supervisor
 writes are not supported.
 
+### Durable child workflows
+
+```ts
+const child = await ctx.spawn("research-child", {
+  workflow: "research@3",
+  input: { topic },
+  caps: ["run:read", "run:watch", "run:output"],
+});
+const outcome = await ctx.waitRun<Result>("research-result", child);
+```
+
+`ctx.spawn(key, { workflow, input, caps? })` starts a saved workflow as a child
+run and returns `{ runId }`. The spawn effect reserves that run ID in its pending
+journal row before creation, resolves the saved `name@version` to an immutable
+definition hash, and records the hash in the completed result. Resume reuses the
+reservation and never creates a duplicate child. Omitting `@version` resolves the
+current saved version once at spawn execution; completed replay never re-resolves it.
+
+`ctx.waitRun(key, handle)` waits for a terminal child outcome and journals
+`{ runId, status, output?, error? }`. Failed children return a `failed` outcome
+rather than throwing in the parent, so workflow code chooses its failure policy.
+Each child receives a fresh run-scoped capability; `caps` may attenuate it to a
+subset of normal run actions. Parent credentials are never copied.
+
+Child runs inherit the resolved saved workflow target, falling back to the parent
+run target, and appear in projections with `parentRunId`. Parent interruption does
+not interrupt children. `continueAsNew` does not adopt existing children; retain
+and supervise their run IDs explicitly. MCP `list_runs` accepts `children_of` to
+return a bounded page containing only direct children.
+
 ### Durable Sleep
 
 ```ts
@@ -2025,9 +2054,8 @@ daemons from driving the same run; after restart, the daemon reclaims orphaned
   re-park or wait for a new signal.
 - Partial `fork` does not copy durable waits. Treat divergent forks of
   wait-heavy workflows with care.
-- Saved tasks, durable task pause/re-entry, and durable child workflow spawning
-  (`ctx.spawn`) are not implemented. Saved workflows are implemented through the
-  workflow registry.
+- Saved tasks and durable task pause/re-entry are not implemented. Durable child
+  workflows launch saved registry entries through `ctx.spawn`.
 - Workflow definition manifests include runtime/import metadata and a workflow
   SDK ABI for the daemon-provided `@kcosr/keel` bridge. Keel does not vendor
   arbitrary external packages into the journal or provide lockfile-level

@@ -64,6 +64,7 @@ import {
 import { drainSignalsVersionIdentity, normalizeDrainSignals } from "./drain-signals.ts";
 import { runBoundedProcess } from "./process-runner.ts";
 import type { Schema } from "./schema.ts";
+import type { ChildRunOutcome, SpawnHandle, SpawnSpec } from "./spawn.ts";
 import {
   type StateNamespace,
   type StateSchemas,
@@ -99,6 +100,12 @@ export type {
 } from "./completion-check.ts";
 export type { CheckpointSpec } from "./checkpoint.ts";
 export type { StateNamespace, StateSchemas, StateSetSpec } from "./state.ts";
+export type {
+  ChildRunCapability,
+  ChildRunOutcome,
+  SpawnHandle,
+  SpawnSpec,
+} from "./spawn.ts";
 export type { WorkspaceSetupCommand, WorkspaceSetupSpec } from "./workspace-setup.ts";
 
 const SESSION_STABLE_KEY_PREFIX = "__session.";
@@ -315,6 +322,12 @@ export interface Ctx {
 
   /** Atomically consume all currently pending signals of `name` without parking. */
   drainSignals<T = unknown>(key: string, name: string): Promise<T[]>;
+
+  /** Start a saved workflow as a durable child run. */
+  spawn(key: string, spec: SpawnSpec): Promise<SpawnHandle>;
+
+  /** Await and journal a durable child run's terminal outcome. */
+  waitRun<T = unknown>(key: string, handle: SpawnHandle): Promise<ChildRunOutcome<T>>;
 
   /** Realm-only durable logical agent session. */
   agentSession(spec: AgentSessionSpec): AgentSession;
@@ -1087,6 +1100,14 @@ export class WorkflowCtx implements Ctx {
       throw new Error(`workspace "${workspaceId}" mode ${row.mode} requires the realm kernel`);
     }
     return resolveUsableDirectory(row.workspacePath);
+  }
+
+  async spawn(_key: string, _spec: SpawnSpec): Promise<SpawnHandle> {
+    throw new Error("ctx.spawn requires the realm kernel");
+  }
+
+  async waitRun<T>(_key: string, _handle: SpawnHandle): Promise<ChildRunOutcome<T>> {
+    throw new Error("ctx.waitRun requires the realm kernel");
   }
 
   agentSession(_spec: AgentSessionSpec): AgentSession {

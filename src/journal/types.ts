@@ -12,6 +12,8 @@ export type EffectType =
   | "checkpoint"
   | "drain_signals"
   | "state_write"
+  | "spawn"
+  | "wait_run"
   | "workspace_setup"
   | "ambient";
 

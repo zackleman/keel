@@ -27,6 +27,16 @@ export type BeginResult =
       resumeToken?: string;
     };
 
+export type SpawnBeginResult =
+  | { kind: "replay"; value: unknown }
+  | {
+      kind: "execute";
+      attempt: number;
+      inputHash: string;
+      startedAtMs: number;
+      reservation: unknown;
+    };
+
 export class StepEngine {
   private readonly ambientCounters = new Map<string, number>();
 
@@ -123,6 +133,69 @@ export class StepEngine {
     return this.beginStrictEffect(key, inputs, version, deps, "drain_signals");
   }
 
+  beginSpawn(
+    key: string,
+    inputs: Json,
+    version: string,
+    reserveRunId: () => string,
+  ): SpawnBeginResult {
+    const inputHash = hashJson(inputs);
+    const existing = this.store.getLatestAttempt(this.runId, key);
+    if (
+      existing &&
+      existing.status === "completed" &&
+      existing.inputHash === inputHash &&
+      existing.version === version
+    ) {
+      return { kind: "replay", value: this.readResult(existing) };
+    }
+    if (existing?.status === "pending") {
+      if (existing.inputHash !== inputHash || existing.version !== version) {
+        throw new Error(`pending spawn "${key}" identity changed; use a new key or rewind the run`);
+      }
+      return {
+        kind: "execute",
+        attempt: existing.attempt,
+        inputHash,
+        startedAtMs: existing.startedAtMs ?? this.host.clock(),
+        reservation: this.readResult(existing),
+      };
+    }
+    const attempt = existing ? existing.attempt + 1 : 1;
+    const startedAtMs = this.host.clock();
+    const reservation = { runId: reserveRunId() };
+    this.store.putJournalRow({
+      runId: this.runId,
+      stableKey: key,
+      attempt,
+      effectType: "spawn",
+      status: "pending",
+      version,
+      inputHash,
+      inputDeps: null,
+      resultInline: JSON.stringify(reservation),
+      startedAtMs,
+    });
+    this.host.fault?.("after-pending", key);
+    return { kind: "execute", attempt, inputHash, startedAtMs, reservation };
+  }
+
+  recordSpawnReservation(key: string, attempt: number, reservation: unknown): void {
+    const row = this.store.getJournalRow(this.runId, key, attempt);
+    if (!row || row.status !== "pending" || row.effectType !== "spawn") {
+      throw new Error(`pending spawn "${key}" attempt ${attempt} not found`);
+    }
+    this.store.putJournalRow({
+      ...row,
+      resultInline: JSON.stringify(reservation),
+      resultArtifact: null,
+    });
+  }
+
+  beginWaitRun(key: string, inputs: Json, version: string): BeginResult {
+    return this.beginStrictEffect(key, inputs, version, null, "wait_run");
+  }
+
   beginStateWrite(
     key: string,
     inputs: Json,
@@ -154,7 +227,13 @@ export class StepEngine {
     inputs: Json,
     version: string,
     deps: InputDep[] | null,
-    effectType: "command" | "completion_check" | "checkpoint" | "drain_signals" | "state_write",
+    effectType:
+      | "command"
+      | "completion_check"
+      | "checkpoint"
+      | "drain_signals"
+      | "state_write"
+      | "wait_run",
   ): BeginResult {
     const inputHash = hashJson(inputs);
     const existing = this.store.getLatestAttempt(this.runId, key);

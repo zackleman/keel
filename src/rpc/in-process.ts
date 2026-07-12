@@ -488,8 +488,8 @@ export class InProcessKeel implements KeelApi {
     return listRunSummaries(this.store);
   }
 
-  listRunsPage(req: { limit: number }): RunSummaryPage {
-    return listRunSummaryPage(this.store, requireRunPageLimit(req?.limit));
+  listRunsPage(req: { limit: number; parentRunId?: string }): RunSummaryPage {
+    return listRunSummaryPage(this.store, requireRunPageLimit(req?.limit), req.parentRunId);
   }
 
   listRunWorkspaces(runId: string, opts: { includeRemoved?: boolean } = {}): RunWorkspaceView[] {

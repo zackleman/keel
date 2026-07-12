@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Changed
+- Added durable child workflows with journaled `ctx.spawn`/`ctx.waitRun`,
+  definition pinning, crash-safe child ID reservation, child run lineage, scoped
+  child capabilities, and MCP `list_runs.children_of` filtering. The workflow
+  SDK ABI is now 14.
 - The web console is now a responsive operator workspace with a mobile drawer,
   session-scoped credential dialog, URL-backed live run filters, bounded older-run
   loading, readable status labels, consolidated run-detail views, and

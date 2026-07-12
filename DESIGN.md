@@ -206,13 +206,15 @@ The prior-runtime defects that shaped Keel map to these requirements:
 | Category | What | First run | On resume | `effect_type` |
 |---|---|---|---|---|
 | **Pure step** | `ctx.step(key, schema, fn)` — `fn` deterministic in its inputs (reducers, transforms). | Execute, validate against schema, persist result + `inputHash`. | `inputHash` and `version` unchanged → **replay** without executing. Changed → re-execute as a new attempt. | `pure` |
-| **Effectful step** | `ctx.agent`, `ctx.human`, `ctx.signal` (and `ctx.spawn`, deferred) — result not re-derivable from inputs. | Execute under write-ahead (§5.5), persist result. | **A `completed` effectful step is never re-executed** (exactly-once result replay). **A `pending` one re-executes at-least-once** — which is why agent calls must be idempotent or carry a dedup key. | `effectful` |
+| **Effectful step** | `ctx.agent`, `ctx.human`, and `ctx.signal` — result not re-derivable from inputs. | Execute under write-ahead (§5.5), persist result. | **A `completed` effectful step is never re-executed** (exactly-once result replay). **A `pending` one re-executes at-least-once** — which is why agent calls must be idempotent or carry a dedup key. | `effectful` |
 | **Command effect** | `ctx.command(spec)` — bounded host-side process execution in an explicit workspace. | Validate workspace/cwd/capabilities/env, write pending row, acquire the workspace holder, run the command, persist bounded result. | Matching completed commands replay without spawning. Matching pending commands may spawn again under at-least-once crash/retry semantics. Pending identity mismatches fail closed. | `command` |
 | **Workspace setup** | `ctx.workspace({ setup })` — bounded host-side preparation commands attached to an explicit workspace. | Resolve/create the workspace, compute setup identity, mark setup pending, run setup commands sequentially, persist bounded command diagnostics, then mark the workspace ready. | Matching completed setup is reused for the same run-scoped workspace. Pending setup commands may run again after crash; failed setup fails later workspace resolution. | `workspace_setup` |
 | **Completion check effect** | `ctx.completionCheck(spec)` — host-side command/git gate for curated workflow completion. | Validate workspace row and check identity, write pending row, acquire the workspace holder, run the check, persist bounded result and events. | Matching completed checks replay. New completion attempts use new keys and observe current workspace/git/remote state. Pending identity mismatches fail closed. | `completion_check` |
 | **Checkpoint effect** | `ctx.checkpoint({ key, message, data? })` — durable, non-parking progress. | Write a strict pending row, then transactionally commit the payload result and one durable `checkpoint` event. | Matching completed checkpoints replay without another event. Matching pending checkpoints re-execute; pending identity mismatches fail closed. | `checkpoint` |
 | **Signal drain effect** | `ctx.drainSignals(key, name)` — non-parking FIFO batch consumption. | Write a strict pending row, then consume every currently pending signal of `name` in the same transaction as the completed batch result. | Matching completed drains replay the recorded batch without consuming later signals. Matching pending drains retry; pending identity mismatches fail closed. | `drain_signals` |
 | **State write effect** | `ctx.state(namespace).set({ key, name, value })` — run-scoped whole-value LWW write. | Write a strict pending row, then commit the result and materialized state row atomically. | Matching writes replay their value and touch the materialized row in program order, rebuilding the synchronous fold. Pending identity mismatches fail closed. | `state_write` |
+| **Child spawn effect** | `ctx.spawn(key, spec)` — start a saved workflow with lineage. | Reserve a child run ID in the pending row, pin the saved definition, create the child and fresh attenuated run capability, then commit the spawn result. | Completed spawns replay the handle. Pending retries reuse the reserved ID and any pinned definition, so creation is idempotent. | `spawn` |
+| **Child wait effect** | `ctx.waitRun(key, handle)` — await a direct child's terminal outcome. | Write a strict pending row, await terminal child state, and commit the outcome. | Completed waits replay the recorded outcome; pending waits reattach to the same child. | `wait_run` |
 | **Ambient** | `ctx.now()`, `ctx.random()`, `ctx.sleep()`. | Generate/record once. | Replay the recorded value (`sleep`: already-elapsed if the wake time passed). | `ambient` |
 
 State reads are plain synchronous fold reads, not effects. Every awaited state write,
@@ -641,8 +643,8 @@ The tracked control-surface convention and CLI interaction matrix live in
 `execute` is not a durable workflow engine: it does not pause and resume its own
 stack, and its `--state` input is only an ephemeral convenience for non-secret
 handles. Durable pauses remain workflow features (`ctx.sleep`, `ctx.signal`,
-`ctx.human`). Saved workflows/tasks and durable child-workflow orchestration are
-deferred until the registry/`ctx.spawn` design is implemented.
+`ctx.human`). Saved workflows and durable child-workflow orchestration use the registry and
+`ctx.spawn`; saved task pause/re-entry remains deferred.
 
 ### 9.1 The `ctx` API (fixed, typed, non-overloaded)
 
@@ -677,6 +679,10 @@ interface Ctx {
   // Non-parking consumption of all currently pending signals under one name.
   drainSignals<T = unknown>(key: string, name: string): Promise<T[]>;
 
+  // Durable child launch and terminal-outcome wait.
+  spawn(key: string, spec: SpawnSpec): Promise<SpawnHandle>;
+  waitRun<T = unknown>(key: string, handle: SpawnHandle): Promise<ChildRunOutcome<T>>;
+
   // Journaled non-determinism — the ONLY time/entropy in realm scope.
   now(): number;
   random(): number;
@@ -704,7 +710,6 @@ interface Ctx {
   log(message: string, data?: Json): void;
   phase(title: string): void;
 
-  // NOTE: ctx.spawn (durable sub-workflows) is deferred — see §14, not yet built.
 }
 
 interface AgentSpec<T> {

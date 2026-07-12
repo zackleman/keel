@@ -40,8 +40,13 @@ export class SupervisorTools {
     this.client.close();
   }
 
-  async listRuns(limit = DEFAULT_MCP_PAGE_LIMIT): Promise<RunSummaryPage> {
-    return this.safe(await this.client.listRunsPage({ limit: validLimit(limit) }));
+  async listRuns(limit = DEFAULT_MCP_PAGE_LIMIT, childrenOf?: string): Promise<RunSummaryPage> {
+    return this.safe(
+      await this.client.listRunsPage({
+        limit: validLimit(limit),
+        ...(childrenOf !== undefined ? { parentRunId: validRunId(childrenOf, "children_of") } : {}),
+      }),
+    );
   }
 
   async watchRun(runId: string): Promise<{
@@ -199,6 +204,13 @@ function validLimit(limit: number): number {
     throw new Error(`limit must be an integer between 1 and ${MAX_MCP_PAGE_LIMIT}`);
   }
   return limit;
+}
+
+function validRunId(runId: string, path: string): string {
+  if (typeof runId !== "string" || runId.trim().length === 0) {
+    throw new Error(`${path} must be a non-empty run ID`);
+  }
+  return runId;
 }
 
 function validCursor(afterSeq: number): number {

@@ -60,12 +60,22 @@ export function issueRunCapability(
   store: JournalStore,
   runId: string,
   atMs: number,
-  opts: { expiresAtMs?: number | null; note?: string | null } = {},
+  opts: {
+    expiresAtMs?: number | null;
+    note?: string | null;
+    actions?: readonly CapabilityAction[];
+  } = {},
 ): { capabilityId: string; token: string } {
+  const actions = opts.actions ?? DEFAULT_RUN_CAPABILITY_ACTIONS;
+  for (const action of actions) {
+    if (!DEFAULT_RUN_CAPABILITY_ACTIONS.includes(action)) {
+      throw new Error(`run capability cannot grant ${action}`);
+    }
+  }
   return putCapability(store, {
     prefix: "kc_run",
     resource: { kind: "run", runId },
-    actions: [...DEFAULT_RUN_CAPABILITY_ACTIONS],
+    actions: [...actions],
     atMs,
     expiresAtMs: opts.expiresAtMs ?? null,
     note: opts.note ?? `run ${runId}`,

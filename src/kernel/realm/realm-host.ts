@@ -34,6 +34,7 @@ import type {
   ProviderConfigValue,
   TraceEvent,
 } from "../../agents/types.ts";
+import { type CapabilityAction, issueRunCapability } from "../../auth/capabilities.ts";
 import { redactCapabilityTokens } from "../../auth/redaction.ts";
 import { type Json, canonicalJson, hashJson } from "../../hash.ts";
 import type { JournalStore } from "../../journal/store.ts";
@@ -109,6 +110,7 @@ import type { CtxHost, FaultPoint } from "../ctx.ts";
 import { extractModuleHelpers } from "../module-helpers.ts";
 import { RUN_FINISHED_INLINE_OUTPUT_BYTES } from "../output.ts";
 import { CommandAbortError, runBoundedProcess } from "../process-runner.ts";
+import type { ChildRunOutcome } from "../spawn.ts";
 import { StepEngine, prepareStepResult, readJournalResult } from "../step-engine.ts";
 import {
   type NormalizedWorkspaceSetupSpec,
@@ -166,6 +168,8 @@ export interface RealmKernelOptions {
   liveEvent?: CtxHost["liveEvent"];
   /** Daemon-local backpressure for provider calls. */
   agentConcurrency?: AgentConcurrencyLimiter;
+  /** Register a newly created child with the owning daemon's heartbeat fence. */
+  onChildRunCreated?: (runId: string) => void;
 }
 
 const TERMINAL: ReadonlySet<RunStatus> = new Set<RunStatus>([
@@ -329,6 +333,7 @@ export class RealmKernel {
   private readonly registry?: AgentProviderRegistry;
   private readonly definitionCacheRoot: string;
   private readonly agentConcurrency?: AgentConcurrencyLimiter;
+  private readonly onChildRunCreated?: (runId: string) => void;
   private readonly activeSessionRuns = new Set<string>();
   private readonly activeWorkers = new Set<Worker>();
   private readonly activeExecutions = new Map<string, Set<ActiveExecution>>();
@@ -347,6 +352,7 @@ export class RealmKernel {
     this.lintEnabled = opts.lint ?? true;
     this.definitionCacheRoot = opts.definitionCacheRoot ?? defaultDefinitionCacheRoot();
     if (opts.agentConcurrency) this.agentConcurrency = opts.agentConcurrency;
+    if (opts.onChildRunCreated) this.onChildRunCreated = opts.onChildRunCreated;
     if (opts.agents) this.registry = opts.agents;
     if (opts.secrets) this.secrets = opts.secrets;
     if (opts.workspaceStore) this.workspaceStore = opts.workspaceStore;
@@ -2855,6 +2861,47 @@ export class RealmKernel {
     }
   }
 
+  private childOutcome(runId: string): ChildRunOutcome | null {
+    const run = this.store.getRun(runId);
+    if (!run) throw new Error(`child run ${runId} not found`);
+    if (!TERMINAL.has(run.status)) return null;
+    return {
+      runId,
+      status: run.status,
+      ...(run.outputRef !== null ? { output: JSON.parse(run.outputRef) } : {}),
+      ...(run.errorJson !== null
+        ? { error: JSON.parse(run.errorJson) as { name: string; message: string } }
+        : {}),
+    };
+  }
+
+  private waitForChildOutcome(runId: string, signal: AbortSignal): Promise<ChildRunOutcome> {
+    const ready = this.childOutcome(runId);
+    if (ready) return Promise.resolve(ready);
+    return new Promise((resolve, reject) => {
+      const cleanup = (): void => {
+        unsubscribe();
+        signal.removeEventListener("abort", onAbort);
+      };
+      const settle = (): void => {
+        const outcome = this.childOutcome(runId);
+        if (!outcome) return;
+        cleanup();
+        resolve(outcome);
+      };
+      const onAbort = (): void => {
+        cleanup();
+        reject(signal.reason ?? new Error(`wait for child run ${runId} aborted`));
+      };
+      const unsubscribe = this.store.onEventAppended((event) => {
+        if (event.runId === runId) settle();
+      });
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) onAbort();
+      else settle();
+    });
+  }
+
   private execute<O>(runId: string, workflowUrl: string, input: unknown): Promise<RunHandle<O>> {
     let sessionRunGuarded = false;
     if (this.store.hasAgentSessions(runId)) {
@@ -3603,6 +3650,185 @@ export class RealmKernel {
                 m.name,
               );
               reply(m.id, { batch });
+              break;
+            }
+            case "spawn": {
+              let begun: ReturnType<StepEngine["beginSpawn"]>;
+              try {
+                begun = engine.beginSpawn(
+                  m.spawn.stableKey,
+                  m.spawn.identity,
+                  m.version,
+                  this.idgen,
+                );
+              } catch (err) {
+                replyError(m.id, err);
+                break;
+              }
+              if (begun.kind === "replay") {
+                const result = begun.value as { runId: string };
+                reply(m.id, { runId: result.runId });
+                break;
+              }
+
+              type SpawnReservation = {
+                runId: string;
+                definitionHash?: string;
+                workflowName?: string | null;
+                workflowRef?: string;
+                target?: string;
+              };
+              let reservation = begun.reservation as SpawnReservation;
+              if (!reservation || typeof reservation.runId !== "string") {
+                replyError(
+                  m.id,
+                  new Error(`spawn "${m.spawn.stableKey}" has an invalid reservation`),
+                );
+                break;
+              }
+              if (!reservation.definitionHash) {
+                const saved = this.store.resolveSavedWorkflowRef(m.spawn.workflow);
+                const parent = this.store.getRun(runId);
+                if (!parent) throw new Error(`parent run ${runId} not found during spawn`);
+                reservation = {
+                  runId: reservation.runId,
+                  definitionHash: saved.definitionHash,
+                  workflowName: saved.workflowName ?? saved.name,
+                  workflowRef: `saved:${saved.name}@${saved.version} ${saved.definitionHash}`,
+                  target: requireRunTarget(
+                    saved.defaultTarget ?? parent.runTarget,
+                    `ctx.spawn("${m.spawn.stableKey}")`,
+                  ),
+                };
+                engine.recordSpawnReservation(m.spawn.stableKey, begun.attempt, reservation);
+              }
+
+              const definitionHash = reservation.definitionHash;
+              const workflowRef = reservation.workflowRef;
+              const target = reservation.target;
+              if (!definitionHash || !workflowRef || !target) {
+                replyError(
+                  m.id,
+                  new Error(`spawn "${m.spawn.stableKey}" reservation is incomplete`),
+                );
+                break;
+              }
+
+              let child = this.store.getRun(reservation.runId);
+              if (!child) {
+                const entryPath = materializeWorkflowDefinition(
+                  this.store,
+                  definitionHash,
+                  this.definitionCacheRoot,
+                );
+                const at = this.host.clock();
+                this.store.transaction(() => {
+                  this.store.insertRun({
+                    runId: reservation.runId,
+                    workflowName: reservation.workflowName ?? null,
+                    definitionVersion: definitionHash,
+                    workflowRef,
+                    runTarget: target,
+                    status: "running",
+                    parentRunId: runId,
+                    tenantId: null,
+                    inputRef: JSON.stringify(m.spawn.input),
+                    outputRef: null,
+                    errorJson: null,
+                    heartbeatAtMs: null,
+                    runtimeOwnerId: null,
+                    createdAtMs: at,
+                  });
+                  this.store.copyRunProfileSnapshot(runId, reservation.runId);
+                  this.store.copyRunSettingSnapshot(runId, reservation.runId);
+                  issueRunCapability(this.store, reservation.runId, at, {
+                    ...(m.spawn.caps !== null
+                      ? { actions: m.spawn.caps as readonly CapabilityAction[] }
+                      : {}),
+                    note: `child run ${reservation.runId} spawned by ${runId}`,
+                  });
+                  this.store.appendEvent(
+                    reservation.runId,
+                    "run.started",
+                    {
+                      name: reservation.workflowName ?? null,
+                      definitionHash,
+                      target,
+                      spawnedFrom: runId,
+                    },
+                    at,
+                  );
+                });
+                child = this.store.getRun(reservation.runId);
+                this.onChildRunCreated?.(reservation.runId);
+                void this.execute(reservation.runId, entryPath, m.spawn.input).catch(() => {});
+              }
+              if (
+                !child ||
+                child.parentRunId !== runId ||
+                child.definitionVersion !== definitionHash
+              ) {
+                replyError(
+                  m.id,
+                  new Error(
+                    `spawn "${m.spawn.stableKey}" child reservation conflicts with an existing run`,
+                  ),
+                );
+                break;
+              }
+
+              this.onStepExecute?.(m.spawn.stableKey);
+              this.host.fault?.("before-commit", m.spawn.stableKey);
+              const result = { runId: reservation.runId, definitionHash };
+              engine.completeStep(
+                m.spawn.stableKey,
+                begun.attempt,
+                m.version,
+                begun.inputHash,
+                begun.startedAtMs,
+                result,
+                null,
+                "spawn",
+              );
+              reply(m.id, { runId: reservation.runId });
+              break;
+            }
+            case "wait-run": {
+              let begun: ReturnType<StepEngine["beginWaitRun"]>;
+              try {
+                begun = engine.beginWaitRun(m.key, m.inputs as Json, m.version);
+              } catch (err) {
+                replyError(m.id, err);
+                break;
+              }
+              if (begun.kind === "replay") {
+                reply(m.id, begun.value);
+                break;
+              }
+              const child = this.store.getRun(m.childRunId);
+              if (!child || child.parentRunId !== runId) {
+                replyError(
+                  m.id,
+                  new Error(`ctx.waitRun handle does not identify a child of run ${runId}`),
+                );
+                break;
+              }
+              this.onStepExecute?.(m.key);
+              const outcome = await this.waitForChildOutcome(
+                m.childRunId,
+                runAbortController.signal,
+              );
+              engine.completeStep(
+                m.key,
+                begun.attempt,
+                m.version,
+                begun.inputHash,
+                begun.startedAtMs,
+                outcome,
+                null,
+                "wait_run",
+              );
+              reply(m.id, outcome);
               break;
             }
             case "command": {

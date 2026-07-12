@@ -21,10 +21,10 @@ export function createSupervisorMcpServer(tools: SupervisorTools): McpServer {
     "list_runs",
     {
       description: "List the newest Keel runs in a bounded page. Requires admin authority.",
-      inputSchema: { limit: limitSchema },
+      inputSchema: { limit: limitSchema, children_of: runIdSchema.optional() },
       annotations: { readOnlyHint: true },
     },
-    async ({ limit }) => result(await tools.listRuns(limit)),
+    async ({ limit, children_of }) => result(await tools.listRuns(limit, children_of)),
   );
   server.registerTool(
     "watch_run",

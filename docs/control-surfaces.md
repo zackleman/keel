@@ -97,6 +97,10 @@ structured tools rather than parsing CLI transcripts. The current MCP surface
 is a local stdio adapter over daemon RPC; new tools must remain bounded and use
 canonical projections rather than reading the journal directly.
 
+The MCP `list_runs` tool accepts an optional `children_of` run ID. It maps to
+the canonical `listRunsPage({ parentRunId })` RPC filter and returns only direct
+children; the existing admin authority and bounded-page contract are unchanged.
+
 Track SDK/workflow API exposure only for workflow authoring or durable
 replay-visible behavior, such as new `ctx.*` methods, exported SDK names, or
 workflow source capture semantics. If SDK exposure is `required`, also evaluate

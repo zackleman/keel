@@ -333,7 +333,7 @@ export interface KeelApi {
   /** Summaries of all runs. */
   listRuns(): RunSummary[];
   /** Newest run summaries with total count for bounded browser lists. */
-  listRunsPage(req: { limit: number }): RunSummaryPage;
+  listRunsPage(req: { limit: number; parentRunId?: string }): RunSummaryPage;
   listRunWorkspaces(
     runId: string,
     opts?: { includeRemoved?: boolean },

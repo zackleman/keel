@@ -106,6 +106,9 @@ See `docs/control-surfaces.md` for the cross-surface status matrix.
 - Completed `ctx.checkpoint` calls appear as canonical projection nodes with a
   `checkpoint: { message, data }` payload and append a durable `checkpoint`
   event in the same transaction as checkpoint completion.
+- `listRunsPage({ limit, parentRunId? })` optionally returns only direct children
+  and reports a filtered `total`. Child projections expose the same
+  `parentRunId` lineage used by `ctx.spawn`.
 
 `keel watch --output text` and the TUI format event streams for humans; scripts
 should prefer JSON/NDJSON or direct API calls.

@@ -90,6 +90,23 @@ describe("supervisor MCP tools", () => {
 
     const store = JournalStore.open(dbPath);
     try {
+      store.insertRun({
+        runId: "run_mcp_child",
+        workflowName: "child",
+        definitionVersion: canonical.definitionVersion,
+        workflowRef: canonical.definitionVersion,
+        runTarget: process.cwd(),
+        status: "finished",
+        parentRunId: launched.runId,
+        tenantId: null,
+        inputRef: "null",
+        outputRef: "null",
+        errorJson: null,
+        heartbeatAtMs: null,
+        runtimeOwnerId: null,
+        createdAtMs: Date.now(),
+        finishedAtMs: Date.now(),
+      });
       store.appendEvent(
         launched.runId,
         "checkpoint",
@@ -100,6 +117,10 @@ describe("supervisor MCP tools", () => {
     } finally {
       store.close();
     }
+    expect(await tools.listRuns(500, launched.runId)).toMatchObject({
+      runs: [{ runId: "run_mcp_child", parentRunId: launched.runId }],
+      total: 1,
+    });
     const checkpoints = await tools.tailCheckpoints(launched.runId);
     expect(checkpoints.frames.map((frame) => frame.type)).toEqual(["checkpoint"]);
     const diagnostics = await tools.tailEvents(launched.runId, 0, ["diagnostic"]);

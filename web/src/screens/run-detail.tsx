@@ -296,6 +296,18 @@ function renderTab(
                 { label: "Status", value: detail.run.status },
                 { label: "Phase", value: detail.run.phase ?? "-" },
                 { label: "Definition", value: detail.run.definitionVersion, mono: true },
+                ...(detail.run.parentRunId
+                  ? [
+                      {
+                        label: "Parent run",
+                        value: (
+                          <a className="inline-link mono" href={`#/runs/${detail.run.parentRunId}`}>
+                            {detail.run.parentRunId}
+                          </a>
+                        ),
+                      },
+                    ]
+                  : []),
                 { label: "Created", value: formatTime(detail.run.createdAtMs) },
                 {
                   label: "Duration",

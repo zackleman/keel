@@ -380,7 +380,7 @@ export class DaemonClient {
   listRuns(): Promise<RunSummary[]> {
     return this.rpc("listRuns", {});
   }
-  listRunsPage(req: { limit: number }): Promise<RunSummaryPage> {
+  listRunsPage(req: { limit: number; parentRunId?: string }): Promise<RunSummaryPage> {
     return this.rpc("listRunsPage", req);
   }
   ping(): Promise<{ ok: boolean; ownerId: string }> {

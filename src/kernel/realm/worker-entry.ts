@@ -43,6 +43,12 @@ import {
 import { drainSignalsVersionIdentity, normalizeDrainSignals } from "../drain-signals.ts";
 import type { Schema } from "../schema.ts";
 import {
+  normalizeSpawn,
+  normalizeWaitRun,
+  spawnVersionIdentity,
+  waitRunVersionIdentity,
+} from "../spawn.ts";
+import {
   type StateNamespace,
   type StateSchemas,
   normalizeStateNamespace,
@@ -818,6 +824,24 @@ const ctx = Object.freeze({
       version,
     });
     return reply.batch as T[];
+  },
+  async spawn(key: unknown, rawSpec: unknown): Promise<{ runId: string }> {
+    const spawn = normalizeSpawn(key, rawSpec);
+    assertNotReservedAuthorKey(spawn.stableKey, "ctx.spawn");
+    const version = computeVersion({ spec: spawnVersionIdentity() });
+    return await rpc<{ runId: string }>({ type: "spawn", spawn, version });
+  },
+  async waitRun<T>(key: unknown, rawHandle: unknown): Promise<T> {
+    const wait = normalizeWaitRun(key, rawHandle);
+    assertNotReservedAuthorKey(wait.stableKey, "ctx.waitRun");
+    const version = computeVersion({ spec: waitRunVersionIdentity() });
+    return await rpc<T>({
+      type: "wait-run",
+      key: wait.stableKey,
+      childRunId: wait.handle.runId,
+      inputs: wait.identity,
+      version,
+    });
   },
   agentSession(rawSessionSpec: {
     key: string;

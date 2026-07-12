@@ -23,6 +23,10 @@ import { KeelDaemon } from "./server.ts";
 
 const FIX = new URL("../kernel/realm/fixtures/", import.meta.url);
 const chainUrl = captureWorkflowFile(new URL("chain.workflow.ts", FIX).pathname);
+const spawnChildUrl = captureWorkflowFile(new URL("spawn-child.workflow.ts", FIX).pathname);
+const spawnParkParentUrl = captureWorkflowFile(
+  new URL("spawn-park-parent.workflow.ts", FIX).pathname,
+);
 const TEST_DAEMON = new URL("./test-daemon.ts", import.meta.url).pathname;
 const onceUrl = captureWorkflowFile(
   new URL("./fixtures/once-pi.workflow.ts", import.meta.url).pathname,
@@ -1733,6 +1737,80 @@ describe("HITL over the socket", () => {
 });
 
 describe("kill -9 daemon recovery", () => {
+  test("a spawned child is not duplicated when the daemon dies before the parent waits", async () => {
+    const socketPath = join(dir, "spawn-recovery.sock");
+    const dbPath = join(dir, "spawn-recovery.db");
+    const setup = JournalStore.open(dbPath);
+    const childDefinition = snapshotWorkflowSource(setup, spawnChildUrl.source, {
+      name: "spawn-child",
+      nowMs: 1,
+      cacheRoot: join(dir, "definitions"),
+    }).snapshot;
+    setup.putSavedWorkflowVersion({
+      name: "spawn-child",
+      definitionHash: childDefinition.hash,
+      workflowName: "spawn-child",
+      defaultTarget: process.cwd(),
+      createdAtMs: 2,
+    });
+    setup.close();
+
+    const env = {
+      ...process.env,
+      KEEL_SOCKET: socketPath,
+      KEEL_DB: dbPath,
+      KEEL_DELAY: "0",
+    };
+    const d1 = Bun.spawn([process.execPath, TEST_DAEMON], {
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await waitForLine(d1.stdout, "READY");
+    const c1 = await DaemonClient.connect(socketPath);
+    const { runId, capability } = await c1.launchRun({
+      ...spawnParkParentUrl,
+      input: { workflow: "spawn-child@1" },
+      name: "spawn-parent",
+    });
+    await c1.authenticate(capability as string);
+    await until(async () => (await c1.getRun(runId))?.status === "waiting-signal", 8000);
+    c1.close();
+    d1.kill("SIGKILL");
+    await d1.exited;
+
+    const mid = JournalStore.open(dbPath);
+    const childRunId = mid.listRuns().find((run) => run.parentRunId === runId)?.runId;
+    expect(childRunId).toBeDefined();
+    expect(mid.getJournalRow(runId, "spawn-child", 1)?.status).toBe("completed");
+    mid.close();
+
+    await Bun.sleep(800);
+    const d2 = Bun.spawn([process.execPath, TEST_DAEMON], {
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await waitForLine(d2.stdout, "READY");
+    const c2 = await DaemonClient.connect(socketPath);
+    await c2.authenticate(capability as string);
+    try {
+      await c2.sendSignal(runId, "continue-to-wait", null);
+      await until(async () => (await c2.getRun(runId))?.status === "finished", 8000);
+      expect(await c2.getRunOutput(runId)).toMatchObject({
+        status: "finished",
+        output: { runId: childRunId, status: "finished", output: 10 },
+      });
+      const final = JournalStore.open(dbPath);
+      expect(final.listRuns().filter((run) => run.parentRunId === runId)).toHaveLength(1);
+      final.close();
+    } finally {
+      c2.close();
+      d2.kill("SIGTERM");
+      await d2.exited;
+    }
+  }, 30000);
+
   test("a run in flight when the daemon dies is recovered on restart", async () => {
     const socketPath = join(dir, "r.sock");
     const dbPath = join(dir, "r.db");

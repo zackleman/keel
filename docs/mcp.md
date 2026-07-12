@@ -28,7 +28,7 @@ the capability's actions, but cannot list runs or decide approvals.
 
 | Tool | Result |
 |---|---|
-| `list_runs` | Bounded newest-run summary page. |
+| `list_runs` | Bounded newest-run summary page; optional `children_of` returns direct children only. |
 | `watch_run` | Compact status, phase, and blockage polling result. |
 | `get_run_detail` | Canonical `RunProjection`, optionally paired with its report. |
 | `get_state` | Current run-scoped state, optionally filtered to one namespace. |

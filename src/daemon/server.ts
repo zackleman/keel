@@ -199,6 +199,7 @@ export class KeelDaemon {
       definitionCacheRoot: this.definitionCacheRoot,
       clock: this.clock,
       agentConcurrency,
+      onChildRunCreated: (runId) => this.claimLaunchedRun(runId),
     });
     this.assertNoDuplicateProfileSources();
     this.api = new InProcessKeel(this.kernel, this.store, this.eventHub, {

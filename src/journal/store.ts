@@ -262,7 +262,20 @@ export class JournalStore {
       .map(mapRun);
   }
 
-  listRunsPage(limit: number): { runs: RunRow[]; total: number } {
+  listRunsPage(limit: number, parentRunId?: string): { runs: RunRow[]; total: number } {
+    if (parentRunId !== undefined) {
+      const runs = this.db
+        .query<RawRunRow, [string, number]>(
+          "SELECT * FROM runs WHERE parent_run_id = ? ORDER BY created_at_ms DESC, run_id DESC LIMIT ?",
+        )
+        .all(parentRunId, limit)
+        .map(mapRun);
+      const total =
+        this.db
+          .query<{ c: number }, [string]>("SELECT COUNT(*) AS c FROM runs WHERE parent_run_id = ?")
+          .get(parentRunId)?.c ?? 0;
+      return { runs, total };
+    }
     const runs = this.db
       .query<RawRunRow, [number]>(
         "SELECT * FROM runs ORDER BY created_at_ms DESC, run_id DESC LIMIT ?",

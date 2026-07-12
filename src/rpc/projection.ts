@@ -455,8 +455,12 @@ export function listRunSummaries(store: JournalStore): RunSummary[] {
   return store.listRuns().map(runSummary);
 }
 
-export function listRunSummaryPage(store: JournalStore, limit: number): RunSummaryPage {
-  const page = store.listRunsPage(limit);
+export function listRunSummaryPage(
+  store: JournalStore,
+  limit: number,
+  parentRunId?: string,
+): RunSummaryPage {
+  const page = store.listRunsPage(limit, parentRunId);
   return { runs: page.runs.map(runSummary), total: page.total };
 }
 

@@ -365,7 +365,10 @@ export class KeelOperationGateway {
       kind: "core",
       handle: (_session, p, credential) => {
         this.authorizeAdmin(credential);
-        return this.opts.api.listRunsPage({ limit: p.limit as number });
+        return this.opts.api.listRunsPage({
+          limit: p.limit as number,
+          ...(typeof p.parentRunId === "string" ? { parentRunId: p.parentRunId } : {}),
+        });
       },
     },
     waitForRun: {

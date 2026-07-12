@@ -63,6 +63,21 @@ describe("RunDetailScreen", () => {
     ]);
   });
 
+  test("links a child run to its parent", async () => {
+    const child = detail();
+    if (!child.run) throw new Error("expected run detail fixture");
+    child.run.parentRunId = "run_parent";
+    const client = {
+      getRun: vi.fn(async () => child),
+      watchRunEvents: vi.fn(),
+    } as unknown as KeelWebClient;
+
+    render(<RunDetailScreen client={client} runId="run_1" refreshKey={0} />);
+
+    const parentLink = await screen.findByRole("link", { name: "run_parent" });
+    expect(parentLink).toHaveAttribute("href", "#/runs/run_parent");
+  });
+
   test("starts live watch from the detail cursor and renders coalesced live text", async () => {
     const watched: WatchRunEventsOptions[] = [];
     const client = {

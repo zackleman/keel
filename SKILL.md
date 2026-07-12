@@ -85,6 +85,8 @@ ctx.sleep(key, ms)                    // durable pause
 ctx.human({ key, prompt })            // wait for a human approval → { status, note }
 ctx.signal(name)                      // wait for an external signal
 ctx.drainSignals(key, name)           // consume all pending signals without parking
+ctx.spawn(key, { workflow, input, caps? }) // start a saved workflow as a child
+ctx.waitRun(key, child)              // journal the child's terminal outcome
 ctx.stepKey(name, id)                 // make a stable key for fan-out
 ctx.log(msg) / ctx.phase(title)       // narration
 ```
@@ -102,6 +104,12 @@ state. Await `s.set({ key, name, value })`; `s.get(name)` and `s.snapshot()`
 are synchronous reads of writes already encountered in the current pass. Use
 stable author keys, include whole JSON values, and keep one logical writer per
 entry. State does not carry through `continueAsNew`; pass the snapshot in input.
+
+Use `ctx.spawn` only with saved workflow refs. Give every spawn and wait its own
+stable key, pin `name@version` when the exact version matters, and branch on the
+`ctx.waitRun` outcome because child failure is returned rather than thrown.
+Spawned children keep running if the parent is interrupted and are not adopted by
+`continueAsNew`. Use `caps` to narrow the fresh child run capability.
 
 ## 4. Calling an agent (`ctx.agent`)
 

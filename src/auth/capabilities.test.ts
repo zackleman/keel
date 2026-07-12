@@ -41,6 +41,33 @@ describe("capability authorization", () => {
     }
   });
 
+  test("run capabilities can be attenuated to an explicit action subset", () => {
+    const store = JournalStore.memory();
+    try {
+      const { token } = issueRunCapability(store, "run_child", 1000, {
+        actions: ["run:read"],
+      });
+      expect(() =>
+        authorize(
+          store,
+          token,
+          { action: "run:read", resource: { kind: "run", runId: "run_child" } },
+          1000,
+        ),
+      ).not.toThrow();
+      expect(() =>
+        authorize(
+          store,
+          token,
+          { action: "run:interrupt", resource: { kind: "run", runId: "run_child" } },
+          1000,
+        ),
+      ).toThrow(/does not grant run:interrupt/);
+    } finally {
+      store.close();
+    }
+  });
+
   test("admin capabilities authorize through the same capability table", () => {
     const store = JournalStore.memory();
     try {
