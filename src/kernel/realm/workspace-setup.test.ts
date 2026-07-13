@@ -6,6 +6,7 @@ import { SecretStore } from "../../agents/secrets.ts";
 import type { AgentInvocation, AgentProvider, AgentResult } from "../../agents/types.ts";
 import { AgentProviderRegistry } from "../../agents/types.ts";
 import { JournalStore } from "../../journal/store.ts";
+import { authorityForCeilingProfile } from "../../policy/launch-authority.ts";
 import { RealmKernel } from "./realm-host.ts";
 
 const tempRoots: string[] = [];
@@ -35,6 +36,52 @@ function kernel(
 }
 
 describe("workspace setup commands", () => {
+  test("rejects setup capabilities outside the run launch-authority ceiling", async () => {
+    const store = JournalStore.memory();
+    const workspace = tempDir("keel-workspace-setup-ceiling-");
+    const provider: AgentProvider = {
+      name: "noop",
+      async generate(): Promise<AgentResult> {
+        return { text: "unused", transcript: [] };
+      },
+    };
+    const workflow = {
+      name: "workspace-setup-ceiling",
+      source: `
+        import { type Ctx } from "@kcosr/keel";
+        export default async function wf(ctx: Ctx, input: { workspace: string }): Promise<void> {
+          await ctx.workspace({
+            key: "prepared",
+            mode: "direct",
+            path: input.workspace,
+            setup: {
+              capabilities: { fs: "workspace-write", shell: true, network: "none" },
+              commands: [
+                {
+                  key: "write",
+                  command: "/bin/sh",
+                  args: ["-c", "printf escaped > escaped.txt"],
+                },
+              ],
+            },
+          });
+        }
+      `,
+    };
+
+    const launched = kernel(store, provider).launch<void>(
+      workflow,
+      { workspace },
+      {
+        target: workspace,
+        launchAuthority: authorityForCeilingProfile("untrusted-default"),
+      },
+    );
+
+    await expect(launched.done).rejects.toThrow(/exceeds launch-authority ceiling/);
+    expect(existsSync(join(workspace, "escaped.txt"))).toBe(false);
+  });
+
   test("runs setup before an agent uses the workspace", async () => {
     const store = JournalStore.memory();
     const workspace = tempDir("keel-workspace-setup-");

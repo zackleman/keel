@@ -1707,6 +1707,7 @@ export class RealmKernel {
     setup: NormalizedWorkspaceSetupSpec,
     command: NormalizedWorkflowCommandSpec,
   ): Promise<void> {
+    this.assertRunCapabilities(runId, setup.capabilities, `workspace "${row.key}" setup`);
     const version = hashJson(command.identity);
     const inputHash = hashJson(command.identity);
     const existing = this.store.getLatestAttempt(runId, command.stableKey);
@@ -3743,20 +3744,25 @@ export class RealmKernel {
                 break;
               }
               if (!reservation.definitionHash) {
-                const saved = this.store.resolveSavedWorkflowRef(m.spawn.workflow);
-                const parent = this.store.getRun(runId);
-                if (!parent) throw new Error(`parent run ${runId} not found during spawn`);
-                reservation = {
-                  runId: reservation.runId,
-                  definitionHash: saved.definitionHash,
-                  workflowName: saved.workflowName ?? saved.name,
-                  workflowRef: `saved:${saved.name}@${saved.version} ${saved.definitionHash}`,
-                  target: requireRunTarget(
-                    saved.defaultTarget ?? parent.runTarget,
-                    `ctx.spawn("${m.spawn.stableKey}")`,
-                  ),
-                };
-                engine.recordSpawnReservation(m.spawn.stableKey, begun.attempt, reservation);
+                try {
+                  const saved = this.store.resolveSavedWorkflowRef(m.spawn.workflow);
+                  const parent = this.store.getRun(runId);
+                  if (!parent) throw new Error(`parent run ${runId} not found during spawn`);
+                  reservation = {
+                    runId: reservation.runId,
+                    definitionHash: saved.definitionHash,
+                    workflowName: saved.workflowName ?? saved.name,
+                    workflowRef: `saved:${saved.name}@${saved.version} ${saved.definitionHash}`,
+                    target: requireRunTarget(
+                      saved.defaultTarget ?? parent.runTarget,
+                      `ctx.spawn("${m.spawn.stableKey}")`,
+                    ),
+                  };
+                  engine.recordSpawnReservation(m.spawn.stableKey, begun.attempt, reservation);
+                } catch (err) {
+                  replyError(m.id, err);
+                  break;
+                }
               }
 
               const definitionHash = reservation.definitionHash;
@@ -3770,55 +3776,61 @@ export class RealmKernel {
                 break;
               }
 
-              let child = this.store.getRun(reservation.runId);
-              if (!child) {
-                const entryPath = materializeWorkflowDefinition(
-                  this.store,
-                  definitionHash,
-                  this.definitionCacheRoot,
-                );
-                const at = this.host.clock();
-                this.store.transaction(() => {
-                  this.store.insertRun({
-                    runId: reservation.runId,
-                    workflowName: reservation.workflowName ?? null,
-                    definitionVersion: definitionHash,
-                    workflowRef,
-                    runTarget: target,
-                    status: "running",
-                    parentRunId: runId,
-                    tenantId: null,
-                    inputRef: JSON.stringify(m.spawn.input),
-                    outputRef: null,
-                    errorJson: null,
-                    heartbeatAtMs: null,
-                    runtimeOwnerId: null,
-                    launchAuthorityJson: this.store.getRun(runId)?.launchAuthorityJson ?? null,
-                    createdAtMs: at,
-                  });
-                  this.store.copyRunProfileSnapshot(runId, reservation.runId);
-                  this.store.copyRunSettingSnapshot(runId, reservation.runId);
-                  issueRunCapability(this.store, reservation.runId, at, {
-                    ...(m.spawn.caps !== null
-                      ? { actions: m.spawn.caps as readonly CapabilityAction[] }
-                      : {}),
-                    note: `child run ${reservation.runId} spawned by ${runId}`,
-                  });
-                  this.store.appendEvent(
-                    reservation.runId,
-                    "run.started",
-                    {
-                      name: reservation.workflowName ?? null,
-                      definitionHash,
-                      target,
-                      spawnedFrom: runId,
-                    },
-                    at,
-                  );
-                });
+              let child: RunRow | null;
+              try {
                 child = this.store.getRun(reservation.runId);
-                this.onChildRunCreated?.(reservation.runId);
-                void this.execute(reservation.runId, entryPath, m.spawn.input).catch(() => {});
+                if (!child) {
+                  const entryPath = materializeWorkflowDefinition(
+                    this.store,
+                    definitionHash,
+                    this.definitionCacheRoot,
+                  );
+                  const at = this.host.clock();
+                  this.store.transaction(() => {
+                    this.store.insertRun({
+                      runId: reservation.runId,
+                      workflowName: reservation.workflowName ?? null,
+                      definitionVersion: definitionHash,
+                      workflowRef,
+                      runTarget: target,
+                      status: "running",
+                      parentRunId: runId,
+                      tenantId: null,
+                      inputRef: JSON.stringify(m.spawn.input),
+                      outputRef: null,
+                      errorJson: null,
+                      heartbeatAtMs: null,
+                      runtimeOwnerId: null,
+                      launchAuthorityJson: this.store.getRun(runId)?.launchAuthorityJson ?? null,
+                      createdAtMs: at,
+                    });
+                    this.store.copyRunProfileSnapshot(runId, reservation.runId);
+                    this.store.copyRunSettingSnapshot(runId, reservation.runId);
+                    issueRunCapability(this.store, reservation.runId, at, {
+                      ...(m.spawn.caps !== null
+                        ? { actions: m.spawn.caps as readonly CapabilityAction[] }
+                        : {}),
+                      note: `child run ${reservation.runId} spawned by ${runId}`,
+                    });
+                    this.store.appendEvent(
+                      reservation.runId,
+                      "run.started",
+                      {
+                        name: reservation.workflowName ?? null,
+                        definitionHash,
+                        target,
+                        spawnedFrom: runId,
+                      },
+                      at,
+                    );
+                  });
+                  child = this.store.getRun(reservation.runId);
+                  this.onChildRunCreated?.(reservation.runId);
+                  void this.execute(reservation.runId, entryPath, m.spawn.input).catch(() => {});
+                }
+              } catch (err) {
+                replyError(m.id, err);
+                break;
               }
               if (
                 !child ||
