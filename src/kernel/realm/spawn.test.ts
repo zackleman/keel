@@ -28,6 +28,31 @@ function saveChild(store: JournalStore): string {
 }
 
 describe("ctx.spawn durable child workflows", () => {
+  test("surfaces an unknown saved workflow as a catchable workflow error", async () => {
+    const store = JournalStore.memory();
+    const workflow = {
+      name: "spawn-unknown-child",
+      source: `
+        import { type Ctx } from "@kcosr/keel";
+        export default async function wf(ctx: Ctx): Promise<string> {
+          try {
+            await ctx.spawn("spawn-unknown", { workflow: "missing-workflow", input: null });
+            return "spawned";
+          } catch (error) {
+            return error instanceof Error ? error.message : String(error);
+          }
+        }
+      `,
+    };
+    const kernel = new RealmKernel(store, { idgen: () => "run_parent" });
+
+    const result = await kernel.run<string>(workflow, null, { target: TARGET });
+
+    expect(result.status).toBe("finished");
+    expect(result.output).toMatch(/saved workflow.*does not exist/);
+    expect(store.listEvents("run_parent").map((event) => event.type)).not.toContain("run.aborted");
+  });
+
   test("spawns and awaits two pinned children with durable lineage", async () => {
     const store = JournalStore.memory();
     const definitionHash = saveChild(store);
