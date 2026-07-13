@@ -396,7 +396,7 @@ export interface KeelApi {
   waitForRun(runId: string): Promise<RunOutcome>;
   /** Return a run's terminal output without subscribing to events. */
   getRunOutput(runId: string): Promise<RunOutcome>;
-  /** Prune unreferenced workflow definition rows and cache entries. */
+  /** Prune unreferenced definitions/cache/artifacts; runTtlMs opts into run-history pruning. */
   gcDefinitions(opts?: { ttlMs?: number; runTtlMs?: number; cacheMinAgeMs?: number }): Promise<{
     oneOffRunsRemoved: number;
     workflowDefinitionsRemoved: number;

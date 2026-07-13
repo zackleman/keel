@@ -22,7 +22,6 @@ import type { JournalStore } from "../journal/store.ts";
 import type { AgentProfileCatalogRow, AgentWorkspaceRow, RunStatus } from "../journal/types.ts";
 import { ownerStaleWindowMs } from "../kernel/liveness.ts";
 import type { RealmKernel, RunHandle } from "../kernel/realm/realm-host.ts";
-import { DEFAULT_ONE_OFF_RUN_TTL_MS } from "../policy/launch-authority.ts";
 import {
   assertValidSettingWrite,
   canonicalSettingValueJson,
@@ -928,10 +927,8 @@ export class InProcessKeel implements KeelApi {
   }> {
     const nowMs = Date.now();
     const operational = effectiveOperationalSettings(this.store.listDaemonSettingRows());
-    const oneOffRunsRemoved = this.store.pruneOneOffRuns({
-      nowMs,
-      ttlMs: opts.runTtlMs ?? DEFAULT_ONE_OFF_RUN_TTL_MS,
-    });
+    const oneOffRunsRemoved =
+      opts.runTtlMs === undefined ? 0 : this.store.pruneOneOffRuns({ nowMs, ttlMs: opts.runTtlMs });
     const workflowDefinitionsRemoved = this.store.pruneWorkflowDefinitions({
       nowMs,
       ttlMs: opts.ttlMs ?? operational.workflowDefinitionGcTtlMs,
@@ -940,6 +937,7 @@ export class InProcessKeel implements KeelApi {
       nowMs,
       minAgeMs: opts.cacheMinAgeMs ?? 0,
     });
+    this.store.gcArtifacts();
     return { oneOffRunsRemoved, workflowDefinitionsRemoved, definitionCacheEntriesRemoved };
   }
 

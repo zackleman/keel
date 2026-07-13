@@ -176,7 +176,7 @@ bun src/cli/keel.ts <command> [args]
 | `tui [runId] [--status status] [--limit n] [--output text]` | Open an interactive run browser or direct run detail/watch view. Browser mode requires admin. |
 | `web [--host 127.0.0.1] [--port 7879] [--socket path] [--assets dir] [--api-only]` | Serve the local browser API transport. |
 | `mcp` | Serve supervisor tools over stdio, using the configured daemon socket and credential chain. |
-| `gc` | Prune unreferenced workflow definition rows and cache entries. Requires admin. |
+| `gc [--prune-runs [--run-ttl duration]]` | Prune unreferenced workflow definition rows, rebuildable cache entries, and unreferenced artifacts. Add `--prune-runs` to also delete expired terminal one-off run history. Requires admin. |
 | `resume [--detach] [--tools] <runId>` | Resume a parked, interrupted, or incomplete run. Watches by default. |
 | `interrupt <runId> [reason]` | Stop active work and park a non-terminal run until explicit `resume`. |
 | `retry [--detach] [--tools] [--secret NAME=VALUE] [--secret-env NAME[=ENV]] <runId>` | Re-run a failed run from its failed step. Watches by default. |
@@ -2028,8 +2028,9 @@ add broad fallback branches for old schema shapes.
 
 ### Artifact GC
 
-`store.gcArtifacts()` reclaims content-addressed blobs no journal row references.
-Refcounts are recomputed from the journal, so GC self-heals after rewind/fork.
+`keel gc` runs artifact GC after its other maintenance steps. `store.gcArtifacts()`
+reclaims content-addressed blobs no journal row references. Refcounts are recomputed
+from the journal, so GC self-heals after rewind, fork, and opt-in run-history pruning.
 
 ### Reviewed workflow promotion
 
@@ -2042,16 +2043,22 @@ approval.
 
 ### Workflow Definition GC
 
-`keel gc` first removes terminal one-off run archives older than seven days by default;
-saved-workflow runs and archives with retained workspaces are exempt. It then asks the
-daemon to prune old unreferenced workflow definition rows and
-evict rebuildable materialized cache directories. It requires admin authority.
-Rows are kept when any run references their `definition_version` or any enabled
-schedule references their pinned hash. Cache directories are not evicted while a
-running or parked run uses that definition. `workflowDefinition.gcTtlMs` is the
-default row TTL when the API/CLI call does not supply `ttlMs`; the shipped
-default is 30 days. `KEEL_DEFINITION_TTL_MS` is no longer read; set
-`workflowDefinition.gcTtlMs` with `keel settings set` instead.
+`keel gc` prunes old unreferenced workflow definition rows, evicts rebuildable
+materialized cache directories, and reclaims artifacts no journal row references. It
+does **not** delete run history by default. Add `--prune-runs` to also delete terminal
+one-off run archives older than seven days, or set an explicit non-negative duration
+with `--run-ttl`, for example `keel gc --prune-runs --run-ttl 24h`. Supported duration
+suffixes are `ms`, `s`, `m`, `h`, and `d`; `--run-ttl` requires `--prune-runs`.
+Saved-workflow runs and archives with retained workspaces are exempt from run pruning.
+Run-scoped capabilities and artifacts referenced only by deleted archives are reclaimed.
+
+The command requires admin authority. Rows are kept when any run references their
+`definition_version` or any enabled schedule references their pinned hash. Cache
+directories are not evicted while a running or parked run uses that definition.
+`workflowDefinition.gcTtlMs` is the default definition-row TTL when the API/CLI call
+does not supply `ttlMs`; the shipped default is 30 days. API callers opt into run
+history pruning by supplying `gcDefinitions({ runTtlMs })`. `KEEL_DEFINITION_TTL_MS`
+is no longer read; set `workflowDefinition.gcTtlMs` with `keel settings set` instead.
 
 ### Multiple Processes
 

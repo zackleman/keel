@@ -10,7 +10,6 @@ import type { JournalStore } from "../journal/store.ts";
 import { failRunWithError } from "../kernel/run-errors.ts";
 import {
   CapabilityCeilingError,
-  DEFAULT_ONE_OFF_RUN_TTL_MS,
   type LaunchAuthority,
   authorityForCeilingProfile,
   preflightSubmissionSource,
@@ -699,10 +698,10 @@ export class KeelOperationGateway {
             ? p.cacheMinAgeMs
             : DEFAULT_DEFINITION_CACHE_MIN_AGE_MS;
         const nowMs = this.opts.clock();
-        const oneOffRunsRemoved = this.opts.store.pruneOneOffRuns({
-          nowMs,
-          ttlMs: typeof p.runTtlMs === "number" ? p.runTtlMs : DEFAULT_ONE_OFF_RUN_TTL_MS,
-        });
+        const oneOffRunsRemoved =
+          typeof p.runTtlMs === "number"
+            ? this.opts.store.pruneOneOffRuns({ nowMs, ttlMs: p.runTtlMs })
+            : 0;
         const workflowDefinitionsRemoved = this.opts.store.pruneWorkflowDefinitions({
           nowMs,
           ttlMs,
@@ -712,6 +711,7 @@ export class KeelOperationGateway {
           nowMs: this.opts.clock(),
           minAgeMs: cacheMinAgeMs,
         });
+        this.opts.store.gcArtifacts();
         return { oneOffRunsRemoved, workflowDefinitionsRemoved, definitionCacheEntriesRemoved };
       },
     },
