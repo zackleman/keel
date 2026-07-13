@@ -20,15 +20,33 @@ Onyx's confessed open problem (durability) is keel's solved core; keel's deferre
 8. Remote deployment + untrusted-submission hardening — capability ceilings for
    agent-authored code, review-gated promotion to saved workflows, contained server
 
-**Deployment/trust context.** Target end state: keel runs on a remote (Tailscale-reachable)
-server; **agents author the workflow code and submit it to the service** — so workflow
-source is untrusted by default. Two submission patterns: (a) *saved* workflows that run
-unchanged for weeks (registry `name@version` → immutable definition hash — already native),
-and (b) *one-off* runs (client-captured source, minutes-to-an-hour, then GC — already
-native). Keel's realm already confines the workflow **body** (JSON-only, effects-only, no
-ambient fs/net/clock); the gap is that workflow code **self-declares** its
-`toolPolicy`/`capabilities` (USAGE.md:1193, 1536-37) with no per-submitter ceiling, and the
-OS sandbox backstop is deferred. Phase 8 closes this.
+**Deployment/trust context (clarified 2026-07-12).** Target end state: **one** keel daemon
+runs on **one** box — possibly a remote server the operator reaches over the network, but a
+single process, not a multi-machine agent fabric. **Agents author the workflow code and a
+trusted client submits it to the daemon.**
+
+The threat model is therefore **untrusted code, trusted submitter**:
+- The adversary is the **workflow source running inside the realm**, which will try to shed
+  the capability ceiling it was launched under (via `continueAsNew`, `fork`, workspace
+  `setup` commands, etc.). This is what Phase 8's ceilings + per-effect runtime assertions
+  defend against, and where the review's C1/C2/C3 lived.
+- The submitting client is the operator's own CLI/service running as the operator. It is
+  **not** an adversary. Consequently a submitter token that a client presents voluntarily is
+  a sufficient mechanism: the operator always presents the restrictive token when launching
+  agent-authored source, and the ceiling then binds the *code* at runtime.
+- **Socket access is admin-equivalent, full trust.** The daemon must not be network-exposed;
+  the box is the boundary. No `--require-auth` mode is needed (reviewed as M4 and retired —
+  it presumed a hostile client, which is not this model). Transport is incidental: SSH-exec
+  stdio, Tailscale, or anything else that reaches the box — named tools in Phase 8c are
+  examples, not requirements.
+
+Two submission patterns: (a) *saved* workflows that run unchanged for weeks (registry
+`name@version` → immutable definition hash — already native), and (b) *one-off* runs
+(client-captured source, minutes-to-an-hour, then GC — already native). Keel's realm already
+confines the workflow **body** (JSON-only, effects-only, no ambient fs/net/clock); the gap
+is that workflow code **self-declares** its `toolPolicy`/`capabilities` (USAGE.md:1193,
+1536-37) with no per-submitter ceiling, and the OS sandbox backstop is deferred. Phase 8
+closes this.
 
 **Non-goals:** body-driven `h.notify` handles (Tier 3); multi-node execution; per-effect OS
 sandboxing (containment is host-level in v1); hosted multi-*tenant* anything (a deployed
