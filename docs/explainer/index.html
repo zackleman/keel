@@ -1,0 +1,1196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>keel · onyx extensions — field explainer</title>
+<meta name="description" content="What keel is, what our fork added, how the durable kernel works, and the complete programmable surface.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+/* ————————————————————————————————————————————————
+   keel × onyx — naval-drafting dark. One accent, reserved
+   exclusively for “new in this fork”. Everything else: steel.
+   ———————————————————————————————————————————————— */
+:root{
+  --bg:#0a0e15;
+  --panel:#0e141e;
+  --panel2:#101825;
+  --line:#1c2634;
+  --line2:#2b3a4d;
+  --fg:#e9e3d3;
+  --steel:#8fa0b4;
+  --dim:#5d6c80;
+  --new:#ff6d3a;
+  --new-dim:#c65a33;
+  --new-soft:rgba(255,109,58,.10);
+  --ok:#84ad8d;
+  --serif:"Instrument Serif",Georgia,"Times New Roman",serif;
+  --sans:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font:400 16px/1.65 var(--sans);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+/* drafting grid + glow + grain */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;
+  background:
+    radial-gradient(1100px 560px at 78% -8%, rgba(96,138,190,.13), transparent 62%),
+    radial-gradient(900px 700px at -10% 108%, rgba(70,96,130,.10), transparent 60%),
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size:auto,auto,56px 56px,56px 56px;
+  opacity:.55;
+}
+body::after{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+}
+a{color:inherit;text-decoration:none}
+::selection{background:rgba(255,109,58,.28);color:#fff}
+
+/* ————— nav ————— */
+nav#rail{
+  position:sticky;top:0;z-index:50;
+  display:flex;align-items:center;gap:2px;overflow-x:auto;
+  padding:10px 16px;border-bottom:1px solid var(--line);
+  background:rgba(10,14,21,.86);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  font:500 11px/1 var(--mono);letter-spacing:.06em;
+  scrollbar-width:none;
+}
+nav#rail::-webkit-scrollbar{display:none}
+nav#rail .brand{color:var(--fg);font:600 12px var(--mono);margin-right:14px;white-space:nowrap}
+nav#rail .brand em{font-style:normal;color:var(--new)}
+nav#rail a.s{
+  color:var(--dim);padding:7px 10px;border-radius:4px;white-space:nowrap;
+  transition:color .2s,background .2s;
+}
+nav#rail a.s:hover{color:var(--fg)}
+nav#rail a.s.on{color:var(--fg);background:var(--panel2)}
+nav#rail a.s .n{color:var(--dim);margin-right:5px}
+nav#rail a.s.on .n{color:var(--new)}
+nav#rail .legend{margin-left:auto;display:flex;gap:14px;color:var(--dim);white-space:nowrap;padding-left:14px}
+nav#rail .legend i{display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:-1px;border:1px solid var(--line2)}
+nav#rail .legend i.k1{background:var(--new);border-color:var(--new)}
+nav#rail .legend i.k0{background:transparent}
+@media (min-width:1360px){
+  nav#rail{
+    position:fixed;top:0;left:0;bottom:0;width:236px;
+    flex-direction:column;align-items:stretch;overflow-y:auto;overflow-x:hidden;
+    padding:26px 18px;border-bottom:0;border-right:1px solid var(--line);
+    background:rgba(10,14,21,.7);
+  }
+  nav#rail .brand{margin:0 0 22px 10px;font-size:13px}
+  nav#rail a.s{padding:8px 10px}
+  nav#rail .legend{margin:auto 0 0 10px;flex-direction:column;gap:8px;padding:18px 0 0;border-top:1px solid var(--line)}
+  main{margin-left:236px}
+}
+
+main{max-width:1000px;margin:0 auto;padding:0 28px 120px}
+@media (min-width:1360px){
+  main{max-width:none;padding:0 56px 120px}
+  main>section, main>header, main>footer{max-width:960px;margin-left:auto;margin-right:auto}
+}
+
+/* ————— typography ————— */
+.kicker{font:500 11px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--dim)}
+.kicker b{color:var(--new);font-weight:500}
+h1{font:400 clamp(58px,9vw,116px)/0.96 var(--serif);margin:.18em 0 .1em;letter-spacing:-.01em}
+h1 .x{font-style:italic;color:var(--steel)}
+h2{font:400 clamp(30px,4vw,44px)/1.1 var(--serif);margin:0 0 .5em}
+h2 em{font-style:italic;color:var(--steel)}
+h3{font:600 13px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--steel);margin:2.2em 0 .8em}
+p{margin:0 0 1em;max-width:72ch;color:#c4c0b2}
+p.lede{font-size:19px;line-height:1.6;color:var(--fg);max-width:66ch}
+small,.small{font-size:13px;color:var(--dim)}
+section{padding:84px 0 20px;border-top:1px solid var(--line);scroll-margin-top:64px}
+section:first-of-type{border-top:0}
+.secno{display:flex;align-items:baseline;gap:14px;margin-bottom:26px}
+.secno .no{font:400 15px var(--mono);color:var(--new)}
+.secno .rule{flex:1;height:1px;background:var(--line);transform:translateY(-4px)}
+code{font:500 .92em var(--mono);color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:.08em .34em;white-space:nowrap}
+code.new{color:var(--new);border-color:#7a4530}
+
+/* NEW badge */
+.nb{
+  display:inline-block;font:600 9px/1 var(--mono);letter-spacing:.14em;
+  color:var(--bg);background:var(--new);border-radius:2px;
+  padding:3px 5px 2px;vertical-align:2px;margin-left:7px;
+}
+.nb.o{background:transparent;color:var(--new);border:1px solid var(--new-dim);padding:2px 5px 1px}
+
+/* ————— hero ————— */
+header.hero{padding:96px 0 60px}
+.hero .thesis{
+  margin:34px 0 0;padding:22px 26px;border-left:2px solid var(--new);
+  background:linear-gradient(90deg, var(--new-soft), transparent 70%);
+  font:400 20px/1.55 var(--serif);max-width:64ch;color:var(--fg);
+}
+.hero .thesis i{color:var(--new);font-style:italic}
+.statstrip{display:flex;flex-wrap:wrap;gap:0;margin-top:44px;border:1px solid var(--line);background:var(--panel)}
+.statstrip .st{flex:1 1 150px;padding:16px 20px;border-right:1px solid var(--line)}
+.statstrip .st:last-child{border-right:0}
+.statstrip .v{font:400 26px/1.1 var(--serif);color:var(--fg)}
+.statstrip .v b{color:var(--new);font-weight:400}
+.statstrip .k{font:500 10px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin-top:6px}
+
+/* ————— cards / panels ————— */
+.cols{display:grid;gap:16px}
+.cols.c3{grid-template-columns:repeat(3,1fr)}
+.cols.c2{grid-template-columns:repeat(2,1fr)}
+@media (max-width:900px){.cols.c3,.cols.c2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);padding:22px 22px 18px;position:relative}
+.card .tag{font:600 10px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+.card h4{font:400 22px/1.2 var(--serif);margin:0 0 10px;color:var(--fg)}
+.card p{font-size:14.5px;color:var(--steel);margin-bottom:.6em}
+.card.new{border-color:#69402e;box-shadow:inset 3px 0 0 var(--new)}
+.card .foot{font:400 12px var(--mono);color:var(--dim);border-top:1px solid var(--line);padding-top:10px;margin-top:12px}
+.note{
+  margin:26px 0;padding:16px 20px;border:1px dashed var(--line2);
+  font-size:14px;color:var(--steel);background:rgba(14,20,30,.6);
+}
+.note b{color:var(--fg);font-weight:500}
+
+/* ————— tables ————— */
+.tblwrap{overflow-x:auto;border:1px solid var(--line);background:var(--panel);margin:18px 0 8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{font:600 10px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);
+   text-align:left;padding:12px 16px;border-bottom:1px solid var(--line2);white-space:nowrap}
+td{padding:10px 16px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--steel)}
+tr:last-child td{border-bottom:0}
+td:first-child{white-space:nowrap;font-family:var(--mono);font-size:12.5px;color:var(--fg)}
+tr.new td{background:var(--new-soft)}
+tr.new td:first-child{box-shadow:inset 2px 0 0 var(--new)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.chip{font:500 12px var(--mono);color:var(--steel);border:1px solid var(--line2);padding:5px 10px;border-radius:3px;background:var(--panel)}
+.chip.new{color:var(--new);border-color:var(--new-dim);background:var(--new-soft)}
+.chip.park{border-style:dashed}
+
+/* ————— code ————— */
+pre.code{
+  background:var(--panel);border:1px solid var(--line);margin:0;
+  padding:20px 22px;overflow-x:auto;
+  font:400 12.75px/1.72 var(--mono);color:var(--steel);
+}
+.tk-k{color:#7e9cc4}
+.tk-s{color:#c9ad84}
+.tk-c{color:#54637a;font-style:italic}
+.tk-n{color:#a9bfae}
+.tk-f{color:#d9d2be}
+.tk-x{color:#9db8d8}
+.tk-new{color:var(--new);font-weight:500}
+.mark{display:inline-block;font:600 10px/1.5 var(--mono);color:var(--bg);background:var(--steel);border-radius:8px;min-width:15px;text-align:center;vertical-align:2px;margin-left:8px;padding:0 3px}
+.mark.a{background:var(--new)}
+.annots{display:grid;gap:0;border:1px solid var(--line);background:var(--panel2)}
+.annots .an{display:flex;gap:14px;padding:13px 18px;border-bottom:1px solid var(--line);font-size:13.5px;color:var(--steel)}
+.annots .an:last-child{border-bottom:0}
+.annots .an .mark{flex:none;margin:3px 0 0}
+.annots .an b{color:var(--fg);font-weight:500}
+.codegrid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,1fr);gap:16px;align-items:start;margin:20px 0}
+@media (max-width:1000px){.codegrid{grid-template-columns:1fr}}
+.panellabel{font:600 10px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);
+  padding:10px 16px;border:1px solid var(--line);border-bottom:0;background:var(--panel2)}
+.panellabel.new{color:var(--new);border-color:#69402e}
+
+/* supervisor transcript */
+pre.mcp{
+  background:#0c1119;border:1px solid #55402f;
+  margin:0;padding:18px 20px;overflow-x:auto;
+  font:400 12.25px/1.85 var(--mono);color:var(--steel);
+}
+pre.mcp .t{color:var(--new)}
+pre.mcp .r{color:#8ea98f}
+pre.mcp .d{color:#4c5a6e}
+
+/* ————— svg diagrams ————— */
+figure{margin:26px 0}
+figure svg{width:100%;height:auto;display:block}
+figcaption{font:400 12.5px/1.6 var(--mono);color:var(--dim);margin-top:12px;max-width:80ch}
+.b{fill:var(--panel);stroke:var(--line2);stroke-width:1}
+.b.hl{fill:var(--panel2)}
+.b.newb{stroke:var(--new);fill:#1a1610}
+.b.ghost{fill:none;stroke:var(--line2);stroke-dasharray:5 4}
+.t{font:500 12px var(--mono);fill:var(--fg)}
+.t.s{font-size:10.5px;fill:var(--steel);font-weight:400}
+.t.d{font-size:10px;fill:var(--dim);font-weight:400}
+.t.a{fill:var(--new)}
+.t.title{font:400 15px var(--serif);fill:var(--fg);letter-spacing:.02em}
+.w{stroke:var(--dim);stroke-width:1.2;fill:none}
+.w.a{stroke:var(--new)}
+.w.dash{stroke-dasharray:4 4}
+.life{stroke:var(--line2);stroke-width:1;stroke-dasharray:2 5}
+
+/* staggered reveal */
+.el{opacity:0;transform:translateY(10px);transition:opacity .65s ease var(--d,0s),transform .65s ease var(--d,0s)}
+svg.in .el,.rv.in .el{opacity:1;transform:none}
+.rv{opacity:0;transform:translateY(14px);transition:opacity .7s ease,transform .7s ease}
+.rv.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){
+  .el,.rv{opacity:1 !important;transform:none !important;transition:none !important}
+}
+
+/* write-ahead pulse */
+@keyframes pulse{
+  0%,100%{opacity:.72}
+  8%,20%{opacity:1}
+}
+svg.in .pl{animation:pulse 9s ease-in-out infinite;animation-delay:calc(var(--p) * 1.5s)}
+@media (prefers-reduced-motion:reduce){svg .pl{animation:none;opacity:1}}
+
+/* evidence */
+.matrix{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media (max-width:900px){.matrix{grid-template-columns:1fr}}
+.mx{background:var(--panel);border:1px solid var(--line);padding:18px 18px 14px}
+.mx .head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.mx .head b{font:500 13px var(--mono);color:var(--fg)}
+.mx .pass{font:600 10px var(--mono);letter-spacing:.14em;color:var(--ok);border:1px solid #3d5545;padding:3px 7px 2px;border-radius:2px}
+.mx p{font-size:13px;color:var(--steel);margin:0}
+
+footer{margin-top:100px;padding-top:28px;border-top:1px solid var(--line);
+  font:400 12.5px/1.9 var(--mono);color:var(--dim)}
+footer b{color:var(--steel);font-weight:500}
+
+/* ————— print ————— */
+@media print{
+  :root{--bg:#f7f4ea;--panel:#fff;--panel2:#f1ede1;--line:#d7d2c4;--line2:#b9b2a1;
+        --fg:#171e29;--steel:#40506a;--dim:#75808f;--new:#c2410c;--new-soft:rgba(194,65,12,.08)}
+  body{background:#f7f4ea;color:#171e29}
+  body::before,body::after{display:none}
+  nav#rail{display:none}
+  main{margin:0;max-width:none;padding:0 8mm}
+  section{padding:24px 0;break-inside:avoid-page}
+  .el,.rv{opacity:1 !important;transform:none !important}
+  svg .pl{animation:none !important;opacity:1 !important}
+  pre.code,pre.mcp{white-space:pre-wrap}
+  pre.mcp{background:#fff;color:#40506a}
+}
+</style>
+</head>
+<body>
+
+<nav id="rail" aria-label="sections">
+  <a class="brand" href="#top">keel<em>&nbsp;×&nbsp;onyx</em></a>
+  <a class="s" href="#what"><span class="n">01</span>What this is</a>
+  <a class="s" href="#planes"><span class="n">02</span>Three planes</a>
+  <a class="s" href="#arch"><span class="n">03</span>Architecture</a>
+  <a class="s" href="#durability"><span class="n">04</span>Durability</a>
+  <a class="s" href="#example"><span class="n">05</span>Worked example</a>
+  <a class="s" href="#surface"><span class="n">06</span>Surface reference</a>
+  <a class="s" href="#trust"><span class="n">07</span>Governance</a>
+  <a class="s" href="#evidence"><span class="n">08</span>Evidence</a>
+  <span class="legend">
+    <span><i class="k1"></i>new in this fork</span>
+    <span><i class="k0"></i>upstream keel</span>
+  </span>
+</nav>
+
+<main id="top">
+<header class="hero">
+  <div class="kicker">field explainer · fork of <b>kcosr/keel</b> · branch <b>onyx-extensions</b> · july 2026</div>
+  <h1>keel <span class="x">× onyx</span></h1>
+  <p class="lede">A durable agent-workflow orchestrator, extended with a supervision
+  and composition surface. This page is for a reader who has never seen keel:
+  what it is, what our fork added and why, how the kernel actually works, and
+  the complete surface you can program and operate against.</p>
+  <div class="thesis rv">
+    Keel already had the durable kernel. We added the <i>supervision and
+    composition</i> surface — progress you can watch, state you can read,
+    steering you can send, children you can spawn — plus the governance to run
+    untrusted, agent-authored code on a box you don’t have to trust it with.
+  </div>
+  <div class="statstrip rv">
+    <div class="st"><div class="v"><b>5</b> / 22</div><div class="k">new ctx primitives</div></div>
+    <div class="st"><div class="v"><b>13</b> tools</div><div class="k">new MCP server</div></div>
+    <div class="st"><div class="v">12→<b>14</b></div><div class="k">workflow SDK ABI</div></div>
+    <div class="st"><div class="v">22→<b>24</b></div><div class="k">journal schema</div></div>
+    <div class="st"><div class="v">6/6 <span style="color:var(--ok)">✓</span></div><div class="k">chaos matrix</div></div>
+  </div>
+</header>
+
+<section id="what">
+  <div class="secno"><span class="no">§01</span><h2>What this is</h2><span class="rule"></span></div>
+  <p><strong>Keel</strong> (upstream: Kevin’s <code>kcosr/keel</code>, MIT) is a durable
+  agent-workflow orchestrator. A workflow is an ordinary <code>async (ctx, input) =&gt; output</code>
+  TypeScript function. Every external effect — an LLM agent call, a shell command, a timer,
+  a human approval — goes through <code>ctx.*</code> and is journaled to a SQLite-WAL store
+  owned by a single-writer daemon. If the process dies at minute 105 of a 106-minute run,
+  resume re-runs the function: the 104 completed effects replay instantly from the journal
+  and only the interrupted one runs again. Edit the code and relaunch, and content-addressed
+  versioning re-executes only the steps your edit actually invalidated.</p>
+  <p>That kernel is upstream keel, unchanged. <strong>Our fork</strong> — the
+  <code>onyx-extensions</code> branch — ports in the capabilities we admired in the
+  Onyx/Slate orchestration VM, whose confessed open problem (durability) is keel’s solved
+  core. Concretely, we added:</p>
+  <div class="cols c2" style="margin-top:20px">
+    <div class="card rv">
+      <div class="tag">already keel — the kernel</div>
+      <h4>Durable functions over a journal</h4>
+      <p>Write-ahead effect lifecycle over SQLite-WAL · deterministic realm for the workflow
+      body · exactly-once replay of completed effects · per-step content-addressed
+      invalidation · durable signals, timers, approvals · time travel (retry / rewind / fork)
+      · CLI, TUI, and web surfaces over one canonical projection.</p>
+      <div class="foot">DESIGN.md · USAGE.md</div>
+    </div>
+    <div class="card new rv">
+      <div class="tag" style="color:var(--new)">added in this fork</div>
+      <h4>Supervision, composition, governance</h4>
+      <p><code class="new">ctx.checkpoint</code> typed durable progress ·
+      <code class="new">ctx.state</code> run-scoped readable state ·
+      <code class="new">ctx.drainSignals</code> non-parking steer uptake ·
+      <code class="new">ctx.spawn</code>/<code class="new">ctx.waitRun</code> durable child runs ·
+      the <code class="new">keel mcp</code> supervisor server (13 tools) ·
+      launch-authority capability ceilings · a review-gated promotion path for saved
+      workflows · opt-in run-retention GC · the autoresearch workload + chaos harness.</p>
+      <div class="foot">docs/designs/onyx-extensions-plan.md</div>
+    </div>
+  </div>
+  <p style="margin-top:22px"><strong>Why:</strong> keel could already survive anything, but a
+  running workflow was a black box you could only <em>wait on</em> — and every workflow was
+  trusted by definition. The fork makes runs <em>legible and steerable from the outside</em>
+  (an agent session on your laptop can watch checkpoints, read live state, send steering,
+  answer approvals over MCP) and makes it safe to execute workflow code that an agent — not
+  you — wrote (ceilings that fail closed, escalation only through journaled human approval).</p>
+  <div class="note"><b>Reading this page.</b> Everything highlighted
+  <span class="nb">NEW</span> or tinted signal-orange was added by this fork. Everything in
+  steel existed in upstream keel. That distinction is exact — it was verified against
+  <code>src/kernel/ctx.ts</code>, <code>src/journal/types.ts</code>, and
+  <code>src/mcp/tools.ts</code>, not paraphrased from docs.</div>
+</section>
+
+<section id="planes">
+  <div class="secno"><span class="no">§02</span><h2>Mental model — <em>three planes</em></h2><span class="rule"></span></div>
+  <p>Keel is easiest to hold as three planes that meet at one journal. The workflow body
+  <strong>never touches the outside world directly</strong> — not the filesystem, not the
+  network, not even the clock. Every side effect is a journaled effect that crosses a plane
+  boundary as JSON.</p>
+  <div class="cols c3" style="margin-top:24px">
+    <div class="card rv">
+      <div class="tag">plane 1 · inside the realm</div>
+      <h4>Authoring</h4>
+      <p>The <code>ctx</code> API, and nothing else. The body runs in a confined Bun Worker
+      realm: JSON in, JSON out, no ambient <code>fs</code>/net/clock/random — a static lint
+      rejects <code>Date.now()</code>, <code>Math.random()</code>, <code>fetch</code>, and
+      friends before launch; the sealed <code>ctx</code> is the only escape hatch.</p>
+      <p><code>ctx.now()</code> and <code>ctx.random()</code> are the only time and entropy
+      sources, and both are journaled. Plain code between <code>ctx.*</code> calls (loops,
+      reducers, dedupe) is not journaled — it just re-runs cheaply on every resume.</p>
+      <div class="foot">DESIGN.md §6 · USAGE.md “Determinism Rules”</div>
+    </div>
+    <div class="card rv">
+      <div class="tag">plane 2 · the daemon</div>
+      <h4>Execution</h4>
+      <p>A single-writer daemon owns everything durable: the SQLite-WAL journal at
+      <code>~/.keel/keel.db</code>, the artifact store, timers and scheduling, the realm
+      host, and agent subprocesses. The daemon — never a client — spawns agents.</p>
+      <p>Every effect follows the write-ahead lifecycle (§04): commit a
+      <em>pending</em> row, execute, then transactionally commit the completed result.
+      Resume is just re-running the function with a memoizing <code>ctx</code>.</p>
+      <div class="foot">DESIGN.md §5, §7</div>
+    </div>
+    <div class="card rv">
+      <div class="tag" style="color:var(--new)">plane 3 · from outside</div>
+      <h4>Supervision</h4>
+      <p>CLI, TUI, web, and — new in this fork — an MCP server are thin clients over one RPC
+      gateway and one canonical <code>RunProjection</code>. No surface rebuilds journal state;
+      humans and agents read literally the same projection.</p>
+      <p>Supervisors watch progress (<code class="new">tail_checkpoints</code>), read live
+      state (<code class="new">get_state</code>), steer (<code>send_signal</code> →
+      <code class="new">ctx.drainSignals</code>), decide approvals, interrupt and resume —
+      without ever touching the database.</p>
+      <div class="foot">docs/mcp.md · docs/control-surfaces.md</div>
+    </div>
+  </div>
+  <div class="note"><b>The seam that makes steering safe:</b> a steer message doesn’t mutate
+  a running prompt from the outside. It sits durably in a per-run FIFO until the workflow
+  <em>chooses</em> to drain it and compose it into the next agent turn’s prompt — so the steer
+  content flows into that effect’s identity hash like any other input, and replay stays exact.</div>
+</section>
+<section id="arch">
+  <div class="secno"><span class="no">§03</span><h2>Architecture</h2><span class="rule"></span></div>
+  <p>One daemon owns everything durable. Clients — including the authoring agent that wrote
+  the workflow, and the supervisor agent watching it — talk to the daemon over a unix-socket
+  RPC and never touch the database. The workflow body runs in a confined realm worker and
+  reaches the world only through journaled effects.</p>
+  <figure>
+  <svg viewBox="0 0 960 640" role="img" aria-label="keel architecture: clients and supervisors over RPC to the single-writer daemon; kernel and realm worker; effects; journal; events and projection" data-reveal>
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#5d6c80"/>
+      </marker>
+    </defs>
+
+    <g class="el" style="--d:.0s">
+      <rect class="b" x="40" y="20" width="310" height="78"/>
+      <text class="t" x="56" y="44">trusted client · authoring agent</text>
+      <text class="t s" x="56" y="63">keel launch — client-captured one-off source</text>
+      <rect x="56" y="72" width="7" height="7" fill="#ff6d3a"/>
+      <text class="t s a" x="69" y="79">submitter token → named capability ceiling</text>
+    </g>
+    <g class="el" style="--d:.06s">
+      <rect class="b" x="610" y="20" width="310" height="78"/>
+      <text class="t" x="626" y="44">supervisors</text>
+      <rect x="626" y="53" width="7" height="7" fill="#ff6d3a"/>
+      <text class="t s a" x="639" y="60">keel mcp — 13 tools, stdio</text>
+      <text class="t s" x="626" y="79">keel watch · tui · web — same projection</text>
+    </g>
+
+    <g class="el" style="--d:.15s">
+      <path class="w" d="M195,98 V146" marker-end="url(#ah)"/>
+      <path class="w" d="M765,98 V146" marker-end="url(#ah)" marker-start="url(#ah)"/>
+      <text class="t d" x="480" y="122" text-anchor="middle">RPC over the unix socket — one operation gateway · socket access = full trust</text>
+    </g>
+
+    <g class="el" style="--d:.22s">
+      <rect class="b hl" x="40" y="148" width="800" height="170"/>
+      <text class="t" x="56" y="172">keel daemon — single writer</text>
+      <text class="t d" x="320" y="172">owns journal · realm · scheduling · agents · projection</text>
+    </g>
+    <g class="el" style="--d:.32s">
+      <rect class="b" x="56" y="188" width="236" height="54"/>
+      <text class="t s" x="68" y="208" fill="#e9e3d3">operation gateway · auth</text>
+      <rect x="68" y="217" width="7" height="7" fill="#ff6d3a"/>
+      <text class="t s a" x="81" y="224">launch-authority ceilings</text>
+    </g>
+    <g class="el" style="--d:.38s">
+      <rect class="b" x="304" y="188" width="164" height="54"/>
+      <text class="t s" x="316" y="208" fill="#e9e3d3">scheduler · timers</text>
+      <text class="t d" x="316" y="226">wakes · cron</text>
+    </g>
+    <g class="el" style="--d:.44s">
+      <rect class="b" x="480" y="188" width="176" height="54"/>
+      <text class="t s" x="492" y="208" fill="#e9e3d3">kernel / step-engine</text>
+      <text class="t d" x="492" y="226">write-ahead lifecycle</text>
+    </g>
+    <g class="el" style="--d:.5s">
+      <rect class="b" x="668" y="188" width="156" height="54"/>
+      <text class="t s" x="680" y="208" fill="#e9e3d3">realm host</text>
+      <text class="t d" x="680" y="226">Bun workers</text>
+    </g>
+    <g class="el" style="--d:.56s">
+      <rect class="b" x="56" y="252" width="236" height="48"/>
+      <text class="t s" x="68" y="272" fill="#e9e3d3">canonical RunProjection</text>
+      <text class="t d" x="68" y="288">one view for every surface</text>
+    </g>
+    <g class="el" style="--d:.6s">
+      <rect class="b" x="304" y="252" width="164" height="48"/>
+      <text class="t s" x="316" y="272" fill="#e9e3d3">durable events</text>
+      <text class="t d" x="316" y="288">per-run seq · cursors</text>
+    </g>
+
+    <g class="el" style="--d:.68s">
+      <path class="w" d="M746,318 V366" marker-end="url(#ah)"/>
+      <text class="t d" x="758" y="346">one worker per execution pass</text>
+      <rect class="b" x="668" y="368" width="200" height="86"/>
+      <text class="t" x="682" y="392">realm worker</text>
+      <text class="t s" x="682" y="412">workflow body — JSON-only</text>
+      <text class="t s" x="682" y="430">sealed ctx.* · no ambient</text>
+      <text class="t s" x="682" y="446">fs / net / clock / random</text>
+    </g>
+
+    <g class="el" style="--d:.74s">
+      <path class="w" d="M568,242 V366" marker-end="url(#ah)"/>
+      <text class="t d" x="578" y="344">begin → execute → commit</text>
+      <path class="w" d="M668,400 H650" marker-end="url(#ah)"/>
+    </g>
+
+    <g class="el" style="--d:.8s">
+      <rect class="b" x="40" y="368" width="140" height="86"/>
+      <text class="t s" x="52" y="392" fill="#e9e3d3">agent subprocess</text>
+      <text class="t d" x="52" y="410">claude · codex · pi</text>
+      <text class="t d" x="52" y="426">sessions · schemas</text>
+    </g>
+    <g class="el" style="--d:.84s">
+      <rect class="b" x="192" y="368" width="150" height="86"/>
+      <text class="t s" x="204" y="392" fill="#e9e3d3">command runner</text>
+      <text class="t d" x="204" y="410">ctx.command</text>
+      <text class="t d" x="204" y="426">completion checks</text>
+    </g>
+    <g class="el" style="--d:.88s">
+      <rect class="b newb" x="354" y="368" width="140" height="86"/>
+      <text class="t s a" x="366" y="392">checkpoint · state</text>
+      <text class="t s a" x="366" y="410">drain_signals</text>
+      <text class="t d" x="366" y="430">strict effects —</text>
+      <text class="t d" x="366" y="446">fail closed on mismatch</text>
+    </g>
+    <g class="el" style="--d:.92s">
+      <rect class="b newb" x="506" y="368" width="140" height="86"/>
+      <text class="t s a" x="518" y="392">spawn → child run</text>
+      <text class="t s a" x="518" y="410">wait_run</text>
+      <text class="t d" x="518" y="430">write-ahead child-id</text>
+      <text class="t d" x="518" y="446">reservation</text>
+    </g>
+    <text class="el t d" style="--d:.94s" x="560" y="472" text-anchor="middle">await ctx.* — requests cross as JSON · the host journals, then executes</text>
+
+    <g class="el" style="--d:1s">
+      <path class="w" d="M300,454 V498" marker-end="url(#ah)"/>
+      <text class="t d" x="312" y="492">results + events — one transaction</text>
+      <rect class="b" x="40" y="500" width="520" height="88"/>
+      <text class="t" x="56" y="524">journal — SQLite WAL · ~/.keel/keel.db</text>
+      <text class="t s" x="56" y="544">runs · journal · events · signals · timers · approvals · artifacts</text>
+      <rect x="56" y="553" width="7" height="7" fill="#ff6d3a"/>
+      <text class="t s a" x="69" y="560">state (schema v23) · launch_authority (schema v24)</text>
+    </g>
+    <g class="el" style="--d:1.08s">
+      <path class="w" d="M560,544 H598" marker-end="url(#ah)"/>
+      <rect class="b" x="600" y="500" width="268" height="88"/>
+      <text class="t" x="616" y="524">events → RunProjection</text>
+      <text class="t s" x="616" y="544">append-only · monotonic seq</text>
+      <text class="t s" x="616" y="560">resume a tail via after-seq</text>
+    </g>
+    <g class="el" style="--d:1.16s">
+      <path class="w dash" d="M868,544 H904 V60 H918" marker-end="url(#ah)"/>
+      <text class="t d" transform="rotate(-90 924 330)" x="924" y="330" text-anchor="middle">what supervisors read</text>
+    </g>
+  </svg>
+  <figcaption>Boxes in steel are upstream keel; signal-orange marks what this fork added
+  (per DESIGN.md §7 and src/mcp/, src/policy/, src/kernel/{checkpoint,state,drain-signals,spawn}.ts).
+  Note the asymmetry: authority enters on the left with the launch, observation exits on the
+  right from the journal — the workflow body in the middle sees neither.</figcaption>
+  </figure>
+</section>
+
+<section id="durability">
+  <div class="secno"><span class="no">§04</span><h2>Data flow — <em>how durability actually works</em></h2><span class="rule"></span></div>
+  <p>Every effect in keel is identified by three values, and everything else follows from
+  this triple:</p>
+  <div class="chips" style="margin:18px 0 8px">
+    <span class="chip"><b style="color:var(--fg)">stableKey</b> — author-chosen identity, content-derived for fan-out (never an array index)</span>
+    <span class="chip"><b style="color:var(--fg)">inputHash</b> — SHA-256 of the inputs; upstream results contribute their content hash</span>
+    <span class="chip"><b style="color:var(--fg)">version</b> — structural hash of the step definition (schema + resolved spec + capabilities)</span>
+  </div>
+  <p>An effect whose triple matches a <em>completed</em> journal row replays its recorded
+  result and never runs again. A changed triple executes fresh as a new attempt, and the old
+  row stays as auditable history. Here is one effect crossing the write-ahead protocol:</p>
+
+  <figure>
+  <svg viewBox="0 0 990 470" role="img" aria-label="write-ahead sequence: commit pending row, execute, transactionally commit completed result" data-reveal>
+    <defs>
+      <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#5d6c80"/>
+      </marker>
+    </defs>
+    <g>
+      <rect class="b" x="40" y="16" width="220" height="44"/>
+      <text class="t" x="150" y="36" text-anchor="middle">workflow body</text>
+      <text class="t d" x="150" y="51" text-anchor="middle">inside the realm</text>
+      <rect class="b" x="360" y="16" width="220" height="44"/>
+      <text class="t" x="470" y="36" text-anchor="middle">kernel / step-engine</text>
+      <text class="t d" x="470" y="51" text-anchor="middle">daemon</text>
+      <rect class="b" x="690" y="16" width="220" height="44"/>
+      <text class="t" x="800" y="36" text-anchor="middle">journal</text>
+      <text class="t d" x="800" y="51" text-anchor="middle">SQLite WAL</text>
+      <line class="life" x1="150" y1="60" x2="150" y2="440"/>
+      <line class="life" x1="470" y1="60" x2="470" y2="440"/>
+      <line class="life" x1="800" y1="60" x2="800" y2="440"/>
+    </g>
+    <g class="pl" style="--p:0">
+      <text class="t s" x="160" y="92">await ctx.agent({ key: "experiment:1", prompt, schema })</text>
+      <path class="w" d="M150,100 H466" marker-end="url(#ah2)"/>
+    </g>
+    <g class="pl" style="--p:1">
+      <text class="t s" x="480" y="142" fill="#e9e3d3">① COMMIT pending row — stableKey · inputHash · version · attempt</text>
+      <path class="w" d="M470,150 H796" marker-end="url(#ah2)"/>
+      <text class="t d" x="480" y="168">fsync — the promise to do this work survives any crash</text>
+    </g>
+    <g class="pl" style="--p:2">
+      <rect class="b hl" x="470" y="196" width="240" height="34"/>
+      <text class="t s" x="484" y="217" fill="#e9e3d3">② execute — provider subprocess runs</text>
+    </g>
+    <g class="pl" style="--p:3">
+      <text class="t s" x="480" y="272" fill="#e9e3d3">③ COMMIT completed { result } + durable events — one transaction</text>
+      <path class="w" d="M470,280 H796" marker-end="url(#ah2)"/>
+      <text class="t d" x="480" y="298">checkpoint frames, state rows, signal consumption commit atomically with the row</text>
+    </g>
+    <g class="pl" style="--p:4">
+      <text class="t s" x="160" y="342">return parsed, schema-validated result</text>
+      <path class="w" d="M470,350 H154" marker-end="url(#ah2)"/>
+    </g>
+    <g>
+      <text class="t d" x="815" y="196">✂ die between ① and ③ →</text>
+      <text class="t d" x="815" y="212">row is pending → resume</text>
+      <text class="t d" x="815" y="228">re-executes · at-least-once</text>
+      <text class="t d" x="815" y="322">after ③ → replay forever</text>
+      <text class="t d" x="815" y="338">exactly-once · never re-runs</text>
+    </g>
+  </svg>
+  <figcaption>The write-ahead lifecycle (src/kernel/step-engine.ts). Pure steps must be
+  deterministic; agent calls must be idempotent or carry a dedup key — re-asking a model is
+  harmless. The five fork-added effects use the <b>strict</b> begin path: a pending row whose
+  identity no longer matches the code fails closed instead of silently swapping payloads.</figcaption>
+  </figure>
+
+  <h3>What replay means in practice</h3>
+  <div class="cols c3">
+    <div class="card rv">
+      <div class="tag">crash mid-effect</div>
+      <h4>kill −9 at minute 105</h4>
+      <p>On restart the daemon rebuilds all run state from the journal (a CAS fence on
+      <code>runtimeOwnerId</code> stops a stale daemon from double-driving). Completed rows
+      replay exactly once; the one pending row re-executes. The chaos harness proved it: the
+      interrupted provider call ran twice, the journal recorded <em>one</em> completed
+      attempt, and the checkpoint timeline had zero duplicates.</p>
+    </div>
+    <div class="card rv">
+      <div class="tag">resume</div>
+      <h4>Re-run, don’t restore</h4>
+      <p>There is no separate replayer. Resume re-runs the whole function with a memoizing
+      <code>ctx</code>: journaled calls short-circuit, plain code between them recomputes in
+      milliseconds. Parked runs — <code>waiting-timer</code>, <code>waiting-human</code>,
+      <code>waiting-signal</code> — cost nothing while parked and survive reboots; signals
+      queued while the daemon was <em>down</em> are drained FIFO on resume.</p>
+    </div>
+    <div class="card rv">
+      <div class="tag">edit + relaunch</div>
+      <h4>Suffix-only re-execution</h4>
+      <p>A rerun with a source override snapshots a new immutable definition. Structural
+      per-step versioning plus value hashing invalidate only what changed — with early
+      cutoff: if an edited step reproduces byte-identical output, everything downstream still
+      replays. Chaos item 4: editing the last iteration’s prompt re-ran exactly
+      <code>experiment:2</code> and nothing else.</p>
+    </div>
+  </div>
+
+  <h3>Why ctx.state reads are free — the replay trick <span class="nb">NEW</span></h3>
+  <p>The crux of <code class="new">ctx.state</code> was choosing what to journal. Journaling
+  every <em>read</em> (Option A) matches the existing machinery but poisons loops: an edit
+  that inserts one read shifts every later occurrence onto the wrong recorded value —
+  silent corruption, keel’s worst failure class. So only <strong>writes</strong> are
+  journaled effects (Option B), with the written value folded into the effect’s own identity.
+  A read is a synchronous, zero-cost fold over the writes that preceded it in this execution
+  pass — correct by construction for run-scoped, single-writer state, because writes replay
+  deterministically in program order. The daemon also materializes a <code>state</code> table
+  (schema v23) in the same commit transaction, so supervisors get O(1) reads over MCP; it is
+  a rebuildable cache the journal can always reconstruct — rewind deletes it, replay heals it.</p>
+
+  <div class="cols c2" style="margin-top:8px">
+    <div class="card rv">
+      <div class="tag">signals</div>
+      <h4>Durable per-run FIFO queues</h4>
+      <p>Signals are named, durable, per-run FIFO queues. <code>ctx.signal(name)</code> parks
+      and consumes the next one; <code class="new">ctx.drainSignals(key, name)</code>
+      <span class="nb">NEW</span> batch-consumes everything currently pending — without
+      parking — and the consumption marks commit in the same transaction as the recorded
+      batch. Rule of thumb: give a name to one consumer style, not both.</p>
+    </div>
+    <div class="card rv">
+      <div class="tag">events</div>
+      <h4>Append-only, cursor-resumable</h4>
+      <p>Durable events carry a per-run monotonic <code>seq</code>. Clients resume with
+      <code>after-seq</code> cursors and can reconnect days later without gaps or duplicates —
+      the property the MCP <code class="new">tail_checkpoints</code>/<code class="new">tail_events</code>
+      tools lean on. Live token deltas are ephemeral frames, deliberately not journaled.</p>
+    </div>
+  </div>
+</section>
+<section id="example">
+  <div class="secno"><span class="no">§05</span><h2>Worked example — <em>autoresearch</em></h2><span class="rule"></span></div>
+  <p>This is real code — <code>workflows/autoresearch/autoresearch.workflow.ts</code>, the
+  saved workflow the chaos matrix was run against (schema parsers elided for space, logic
+  untouched). A setup agent proposes a hypothesis; an experiment loop drains supervisor
+  steers, runs a typed agent per iteration, keeps or reverts by score in plain code, and
+  checkpoints; a recorder summarizes; an optional human gate ships. Orange tokens are
+  fork-added primitives.</p>
+
+  <div class="codegrid">
+    <div>
+      <div class="panellabel">workflow side — what the author wrote</div>
+<pre class="code"><span class="tk-k">import</span> { <span class="tk-k">type</span> Ctx, <span class="tk-k">type</span> HumanDecision, jsonSchema } <span class="tk-k">from</span> <span class="tk-s">"@kcosr/keel"</span>;
+
+<span class="tk-c">// Input / SetupResult / ExperimentResult / RecorderResult / HistorySchema:</span>
+<span class="tk-c">// jsonSchema&lt;T&gt; parsers — their structural hashes enter effect identity. (elided)</span>
+
+<span class="tk-k">export default async function</span> <span class="tk-f">autoresearch</span>(ctx: Ctx, rawInput: <span class="tk-k">unknown</span>) {
+  <span class="tk-k">const</span> input = Input.<span class="tk-f">parse</span>(rawInput);
+  ctx.<span class="tk-x">phase</span>(<span class="tk-s">"Setup"</span>);
+  <span class="tk-k">const</span> setup = <span class="tk-k">await</span> ctx.<span class="tk-x">agent</span>({<span class="mark">1</span>
+    key: <span class="tk-s">"setup"</span>, provider: <span class="tk-s">"mock"</span>,
+    prompt: <span class="tk-s">"Establish a deterministic baseline and one testable optimization hypothesis."</span>,
+    schema: SetupResult, toolPolicy: <span class="tk-s">"none"</span>,
+  });
+
+  <span class="tk-k">const</span> research = ctx.<span class="tk-new">state</span>&lt;{ best: Candidate; history: HistoryEntry[] }&gt;(<span class="tk-s">"research"</span>, {<span class="mark a">2</span>
+    best: ExperimentResult, history: HistorySchema,
+  });
+  <span class="tk-k">await</span> research.<span class="tk-new">set</span>({ key: <span class="tk-s">"state.best.init"</span>, name: <span class="tk-s">"best"</span>,
+    value: { score: setup.baselineScore, candidate: <span class="tk-s">"baseline"</span>, summary: setup.hypothesis } });
+  <span class="tk-k">await</span> research.<span class="tk-new">set</span>({ key: <span class="tk-s">"state.history.init"</span>, name: <span class="tk-s">"history"</span>, value: [] });
+
+  ctx.<span class="tk-x">phase</span>(<span class="tk-s">"Experiment"</span>);
+  <span class="tk-k">for</span> (<span class="tk-k">let</span> i = <span class="tk-n">0</span>; i &lt; input.iterations; i++) {
+    <span class="tk-k">const</span> steers = <span class="tk-k">await</span> ctx.<span class="tk-new">drainSignals</span>&lt;Steer&gt;(ctx.<span class="tk-x">stepKey</span>(<span class="tk-s">"steer"</span>, String(i)), <span class="tk-s">"steer"</span>);<span class="mark a">3</span>
+    <span class="tk-k">const</span> best = research.<span class="tk-new">get</span>(<span class="tk-s">"best"</span>)!;  <span class="tk-c">// synchronous fold read — free</span>
+    <span class="tk-k">const</span> lateInstruction =
+      i === input.iterations - <span class="tk-n">1</span> ? <span class="tk-s">"validate the final candidate"</span> : <span class="tk-s">"explore a candidate"</span>;
+    <span class="tk-k">const</span> result = <span class="tk-k">await</span> ctx.<span class="tk-x">agent</span>({
+      key: ctx.<span class="tk-x">stepKey</span>(<span class="tk-s">"experiment"</span>, String(i)), provider: <span class="tk-s">"mock"</span>,
+      prompt: [<span class="mark">4</span>
+        <span class="tk-s">`Iteration ${i}: ${lateInstruction}.`</span>,
+        <span class="tk-s">`Hypothesis: ${setup.hypothesis}`</span>,
+        <span class="tk-s">`Current best: ${JSON.stringify(best)}`</span>,
+        <span class="tk-s">`Supervisor steers: ${JSON.stringify(steers)}`</span>,
+      ].<span class="tk-f">join</span>(<span class="tk-s">"\n"</span>),
+      schema: ExperimentResult, toolPolicy: <span class="tk-s">"none"</span>, onFailure: <span class="tk-s">"null"</span>, maxRetries: <span class="tk-n">0</span>,
+    });
+
+    <span class="tk-k">const</span> accepted = result !== <span class="tk-n">null</span> &amp;&amp; result.score &gt; best.score;
+    <span class="tk-k">if</span> (accepted) {
+      <span class="tk-k">await</span> research.<span class="tk-new">set</span>({ key: ctx.<span class="tk-x">stepKey</span>(<span class="tk-s">"state.best"</span>, String(i)), name: <span class="tk-s">"best"</span>, value: result });
+    }
+    <span class="tk-k">await</span> research.<span class="tk-new">set</span>({
+      key: ctx.<span class="tk-x">stepKey</span>(<span class="tk-s">"state.history"</span>, String(i)), name: <span class="tk-s">"history"</span>,
+      value: [...research.<span class="tk-new">get</span>(<span class="tk-s">"history"</span>)!, { iteration: i, accepted, result, steers }],
+    });
+
+    <span class="tk-k">await</span> ctx.<span class="tk-new">checkpoint</span>({<span class="mark a">5</span>
+      key: ctx.<span class="tk-x">stepKey</span>(<span class="tk-s">"checkpoint"</span>, String(i)),
+      message: <span class="tk-s">`iteration ${i}: ${accepted ? "kept" : "reverted"}`</span>,
+      data: { iteration: i, accepted, best: research.<span class="tk-new">get</span>(<span class="tk-s">"best"</span>)!, result, steers },
+    });
+
+    <span class="tk-k">if</span> (i &lt; input.iterations - <span class="tk-n">1</span> &amp;&amp; input.cooldownMs &gt; <span class="tk-n">0</span>) {
+      <span class="tk-k">await</span> ctx.<span class="tk-x">sleep</span>(ctx.<span class="tk-x">stepKey</span>(<span class="tk-s">"cooldown"</span>, String(i)), input.cooldownMs);<span class="mark">6</span>
+    }
+  }
+
+  <span class="tk-k">const</span> { best, history } = research.<span class="tk-new">snapshot</span>();
+  ctx.<span class="tk-x">phase</span>(<span class="tk-s">"Record"</span>);
+  <span class="tk-k">const</span> recorder = <span class="tk-k">await</span> ctx.<span class="tk-x">agent</span>({ key: <span class="tk-s">"recorder"</span>, provider: <span class="tk-s">"mock"</span>,
+    prompt: <span class="tk-s">`Record the experiment history and winning candidate.\n${JSON.stringify({ best, history })}`</span>,
+    schema: RecorderResult, toolPolicy: <span class="tk-s">"none"</span> });
+  <span class="tk-k">await</span> ctx.<span class="tk-new">checkpoint</span>({ key: <span class="tk-s">"checkpoint.final"</span>, message: recorder.summary,
+    data: { best, iterations: history.length } });
+
+  <span class="tk-k">let</span> approval: HumanDecision | <span class="tk-n">null</span> = <span class="tk-n">null</span>;
+  <span class="tk-k">if</span> (input.requireApproval) {
+    ctx.<span class="tk-x">phase</span>(<span class="tk-s">"Ship"</span>);
+    approval = <span class="tk-k">await</span> ctx.<span class="tk-x">human</span>({ key: <span class="tk-s">"ship"</span>,<span class="mark">7</span>
+      prompt: <span class="tk-s">`Ship candidate ${best.candidate} at score ${best.score}?`</span> });
+  }
+  <span class="tk-k">return</span> { best, history, recorder, approval };
+}</pre>
+    </div>
+    <div>
+      <div class="panellabel">annotations</div>
+      <div class="annots">
+        <div class="an"><span class="mark">1</span><span><b>Keyed, schema-validated agent effect.</b>
+        Identity = key + resolved prompt + structural schema hash. Once completed, it never
+        re-runs on resume — this is the atom of durability.</span></div>
+        <div class="an"><span class="mark a">2</span><span><b>ctx.state (new).</b> The handle is
+        pure; each <code>set</code> is a strict journaled effect with the <em>value in its
+        identity</em>, so a stale value can never silently replay. Reads cost nothing.
+        Supervisors see the same values live via MCP <code>get_state</code>.</span></div>
+        <div class="an"><span class="mark a">3</span><span><b>ctx.drainSignals (new).</b> Consumes
+        every pending <code>steer</code> signal FIFO, without parking; returns <code>[]</code>
+        when quiet. In the chaos run, two steers queued <em>while the daemon was down</em>
+        arrived in order at the next iteration.</span></div>
+        <div class="an"><span class="mark">4</span><span><b>The steering seam.</b> Steers and
+        state compose into the prompt, so they enter the turn’s <code>inputHash</code>.
+        External steering changes effect identity only through content the author chose to
+        include — replay stays exact, no host-side prompt mutation.</span></div>
+        <div class="an"><span class="mark a">5</span><span><b>ctx.checkpoint (new).</b> Durable
+        progress: one <code>checkpoint</code> event committed in the same transaction as the
+        completed row. Replay emits nothing — the timeline can’t double up.</span></div>
+        <div class="an"><span class="mark">6</span><span><b>Durable park.</b>
+        <code>waiting-timer</code> costs nothing and survives restarts — chaos item 2
+        restarted the daemon after the deadline and the run woke correctly.</span></div>
+        <div class="an"><span class="mark">7</span><span><b>Human gate.</b> Parks
+        <code>waiting-human</code> until an approval arrives — here, from the supervisor over
+        MCP: <code>decide_approval(…, "approved", "ship it")</code>.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <figure>
+  <svg viewBox="0 0 960 330" role="img" aria-label="run timeline: workflow lane with agent turns, checkpoints, parks; supervisor lane steering and approving over MCP" data-reveal>
+    <defs>
+      <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#ff6d3a"/>
+      </marker>
+      <marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#5d6c80"/>
+      </marker>
+    </defs>
+    <g class="el" style="--d:0s">
+      <text class="t a" x="16" y="84">supervisor</text>
+      <text class="t d" x="16" y="100">over MCP</text>
+      <line x1="120" y1="80" x2="930" y2="80" stroke="#2b3a4d" stroke-width="1"/>
+      <text class="t" x="16" y="224" fill="#e9e3d3">run</text>
+      <text class="t d" x="16" y="240">one journal</text>
+      <line x1="120" y1="220" x2="930" y2="220" stroke="#5d6c80" stroke-width="1.4"/>
+    </g>
+    <g class="el" style="--d:.15s">
+      <circle cx="140" cy="220" r="4" fill="#8fa0b4"/>
+      <text class="t d" x="128" y="248">launch</text>
+      <rect x="170" y="213" width="40" height="14" fill="#39485c"/>
+      <text class="t d" x="166" y="204">setup</text>
+      <line x1="230" y1="212" x2="230" y2="228" stroke="#ff6d3a" stroke-width="2"/>
+      <rect x="245" y="213" width="55" height="14" fill="#39485c"/>
+      <text class="t d" x="240" y="248">exp:0</text>
+      <path d="M315,213 l7,7 l-7,7 l-7,-7 z" fill="#ff6d3a"/>
+      <rect x="336" y="212" width="40" height="16" fill="none" stroke="#5d6c80" stroke-dasharray="3 3"/>
+      <text class="t d" x="330" y="204">sleep</text>
+      <line x1="396" y1="212" x2="396" y2="228" stroke="#ff6d3a" stroke-width="2"/>
+      <rect x="410" y="213" width="55" height="14" fill="#39485c"/>
+      <text class="t d" x="406" y="248">exp:1</text>
+      <path d="M480,213 l7,7 l-7,7 l-7,-7 z" fill="#ff6d3a"/>
+      <line x1="560" y1="212" x2="560" y2="228" stroke="#ff6d3a" stroke-width="2"/>
+      <text class="t d" x="540" y="248">drain → exp:2</text>
+      <rect x="575" y="213" width="55" height="14" fill="#39485c"/>
+      <path d="M645,213 l7,7 l-7,7 l-7,-7 z" fill="#ff6d3a"/>
+      <rect x="668" y="213" width="45" height="14" fill="#39485c"/>
+      <text class="t d" x="656" y="248">recorder</text>
+      <path d="M728,213 l7,7 l-7,7 l-7,-7 z" fill="#ff6d3a"/>
+      <rect x="750" y="212" width="50" height="16" fill="none" stroke="#5d6c80" stroke-dasharray="3 3"/>
+      <text class="t d" x="736" y="248">waiting-human</text>
+      <circle cx="845" cy="220" r="4" fill="#84ad8d"/>
+      <text class="t d" x="826" y="248">finished</text>
+    </g>
+    <g class="el" style="--d:.35s">
+      <circle cx="200" cy="80" r="3" fill="#8fa0b4"/>
+      <circle cx="340" cy="80" r="3" fill="#8fa0b4"/>
+      <circle cx="520" cy="80" r="3" fill="#8fa0b4"/>
+      <circle cx="700" cy="80" r="3" fill="#8fa0b4"/>
+      <text class="t d" x="150" y="64">watch_run polls — status · phase · blockage</text>
+    </g>
+    <g class="el" style="--d:.55s">
+      <path class="w a" d="M315,204 V96" stroke-dasharray="4 4" marker-end="url(#ah3)"/>
+      <text class="t s a" x="240" y="126">tail_checkpoints(afterSeq)</text>
+      <text class="t d" x="240" y="142">frames + nextCursor — no gaps, no dups</text>
+    </g>
+    <g class="el" style="--d:.7s">
+      <path class="w a" d="M500,88 V150 H556 V204" marker-end="url(#ah3)"/>
+      <text class="t s a" x="430" y="112">send_signal("steer",</text>
+      <text class="t s a" x="430" y="128">  { message: "focus on parser" })</text>
+      <text class="t d" x="430" y="144">lands at the next turn boundary</text>
+    </g>
+    <g class="el" style="--d:.85s">
+      <path class="w a" d="M620,204 V96" stroke-dasharray="4 4" marker-end="url(#ah3)"/>
+      <text class="t s a" x="612" y="126">get_state("research")</text>
+      <text class="t d" x="612" y="142">→ { best, history }</text>
+    </g>
+    <g class="el" style="--d:1s">
+      <path class="w a" d="M775,88 V204" marker-end="url(#ah3)"/>
+      <text class="t s a" x="782" y="126">decide_approval(</text>
+      <text class="t s a" x="782" y="142">  "run…:ship",</text>
+      <text class="t s a" x="782" y="158">  approved, "ship it")</text>
+    </g>
+    <g class="el" style="--d:1.1s">
+      <rect x="132" y="290" width="8" height="8" fill="#39485c"/><text class="t d" x="146" y="298">agent turn</text>
+      <path d="M242,290 l6,6 l-6,6 l-6,-6 z" fill="#ff6d3a"/><text class="t d" x="256" y="298">checkpoint event</text>
+      <line x1="386" y1="288" x2="386" y2="300" stroke="#ff6d3a" stroke-width="2"/><text class="t d" x="396" y="298">drainSignals</text>
+      <rect x="502" y="289" width="16" height="10" fill="none" stroke="#5d6c80" stroke-dasharray="3 3"/><text class="t d" x="526" y="298">park (timer / human)</text>
+      <text class="t d" x="680" y="298">orange = fork-added surface</text>
+    </g>
+  </svg>
+  <figcaption>One run, two vantage points. The steel spine is the durable run; everything
+  orange — checkpoints out, steers in, state reads, the approval — is the supervision
+  surface this fork added around it.</figcaption>
+  </figure>
+
+  <div class="panellabel new">supervisor side — the same run over MCP (reconstructed from the chaos-matrix evidence)</div>
+<pre class="mcp"><span class="t">▸ watch_run</span>(run_a91f…)                    <span class="r">→ { status:"running", phase:"Experiment", blockage:null }</span>
+<span class="t">▸ tail_checkpoints</span>(run_a91f…, afterSeq:0) <span class="r">→ 2 frames · nextCursor:14</span>
+<span class="d">    checkpoint:0 #1  "iteration 0: kept"      { accepted:true,  steers:[] }</span>
+<span class="d">    checkpoint:1 #1  "iteration 1: reverted"  { accepted:false, steers:[] }</span>
+<span class="t">▸ send_signal</span>(run_a91f…, "steer", { message:"focus on parser" })
+                                           <span class="r">→ durable · wake accepted (ack ≠ “worker saw it”)</span>
+<span class="t">▸ tail_checkpoints</span>(run_a91f…, afterSeq:14) <span class="r">→ 1 frame · nextCursor:19</span>
+<span class="d">    checkpoint:2 #1  "iteration 2: kept"      { steers:[{ message:"focus on parser" }] }</span>
+<span class="t">▸ get_state</span>(run_a91f…, "research")         <span class="r">→ { best:{ score:0.84, candidate:"cand-2", … }, history:[…3] }</span>
+<span class="t">▸ get_run_blockage</span>(run_a91f…)              <span class="r">→ { waiting:"waiting_human", approvalId:"run_a91f…:ship" }</span>
+<span class="t">▸ decide_approval</span>("run_a91f…:ship", "approved", "ship it")
+<span class="t">▸ wait_for_run</span>(run_a91f…)                  <span class="r">→ { status:"finished", output:{ best, history, … } }</span></pre>
+  <p class="small" style="margin-top:12px">Delivery semantics, stated honestly:
+  <code>send_signal</code> acknowledges durability and wake-start — not that the worker saw
+  the message. A steer sent mid-turn lands at the next turn boundary (Tier-1 contract); the
+  supervisor observes uptake in the next checkpoint, exactly as above. If the MCP client
+  restarts, it resumes from its persisted <code>nextCursor</code> with no gaps and no
+  duplicates (chaos item 6).</p>
+</section>
+<section id="surface">
+  <div class="secno"><span class="no">§06</span><h2>Surface reference — <em>the complete programmable surface</em></h2><span class="rule"></span></div>
+  <p>Everything below was checked against the source at the current checkout —
+  <code>src/kernel/ctx.ts</code> (the <code>Ctx</code> interface),
+  <code>src/mcp/tools.ts</code>, <code>src/cli/keel.ts</code>, and
+  <code>src/journal/types.ts</code>. Five of twenty-two <code>ctx</code> members are ours;
+  the MCP server is ours in its entirety.</p>
+
+  <h3>a · the <code>ctx</code> API — everything a workflow can do</h3>
+  <div class="tblwrap rv">
+    <table>
+      <thead><tr><th>member</th><th>signature</th><th>semantics</th></tr></thead>
+      <tbody>
+        <tr><td>run</td><td>{ id, target }</td><td>Current run id and the daemon-resolvable target path.</td></tr>
+        <tr><td>workspace</td><td>(spec) → WorkspaceHandle</td><td>Resolve a run-scoped workspace: direct, worktree, copy, or clone; optional setup commands.</td></tr>
+        <tr><td>withWorkspace</td><td>(specOrHandle, fn) → T</td><td>Bind a workspace as the scoped default for agents/sessions inside <code>fn</code>.</td></tr>
+        <tr><td>step</td><td>(key, schema, inputs, fn, opts?) → T</td><td>Pure memoized step; <code>fn</code> deterministic in explicit inputs. Re-runs only if inputs or structural version change.</td></tr>
+        <tr><td>agent</td><td>(spec) → T</td><td>Journaled, schema-enforced agent call. Completed → never re-runs; pending → at-least-once.</td></tr>
+        <tr><td>command</td><td>(spec) → CommandResult</td><td>Durable host-side command in an explicit workspace; bounded output; identity covers the full invocation.</td></tr>
+        <tr><td>completionCheck</td><td>(spec) → CompletionCheckResult</td><td>Durable host-side completion gate (command / git checks) for curated workflows.</td></tr>
+        <tr class="new"><td>checkpoint<span class="nb">NEW</span></td><td>({ key, message, data? }) → void</td><td>Durable, non-parking progress. One <code>checkpoint</code> event commits with the row; replay never duplicates it.</td></tr>
+        <tr class="new"><td>state<span class="nb">NEW</span></td><td>(namespace, schemas?) → StateNamespace</td><td>Run-scoped namespace: <code>set({key,name,value})</code> is a journaled strict effect (value ∈ identity); <code>get</code>/<code>snapshot</code> are free synchronous fold reads.</td></tr>
+        <tr class="new"><td>drainSignals<span class="nb">NEW</span></td><td>&lt;T&gt;(key, name) → T[]</td><td>Atomically consume all currently pending signals of <code>name</code>, FIFO, without parking; <code>[]</code> when quiet.</td></tr>
+        <tr class="new"><td>spawn<span class="nb">NEW</span></td><td>(key, { workflow, input, caps? }) → { runId }</td><td>Start a saved workflow as a durable child. Write-ahead child-id reservation → crash-safe, never double-launches; child gets a freshly attenuated capability.</td></tr>
+        <tr class="new"><td>waitRun<span class="nb">NEW</span></td><td>&lt;T&gt;(key, handle) → ChildRunOutcome&lt;T&gt;</td><td>Await + journal a direct child’s terminal outcome; child failure surfaces as the result, the author decides.</td></tr>
+        <tr><td>agentSession</td><td>(spec) → AgentSession</td><td>Realm-only durable logical session; multiple keyed <code>.turn()</code> calls in one backend conversation.</td></tr>
+        <tr><td>now / random</td><td>() → number</td><td>Journaled wall-clock and entropy — the only time/randomness in workflow scope. Recorded once, replayed after.</td></tr>
+        <tr><td>sleep</td><td>(key, ms) → void</td><td>Durable timer; parks <code>waiting-timer</code> at zero cost; survives restarts. Duration is part of identity.</td></tr>
+        <tr><td>human</td><td>(spec) → HumanDecision</td><td>Park <code>waiting-human</code> until approve/deny. <code>requestedCaps</code> is the escalation path (§07).</td></tr>
+        <tr><td>signal</td><td>&lt;T&gt;(name) → T</td><td>Park <code>waiting-signal</code>; the Nth call consumes the Nth signal of that name (durable per-name FIFO).</td></tr>
+        <tr><td>continueAsNew</td><td>(input) → never</td><td>End this run as <code>continued</code>, start a fresh run of the same workflow — bounds journal growth. Carries the launch-authority snapshot (§08).</td></tr>
+        <tr><td>stepKey</td><td>(name, id) → string</td><td>Stable fan-out key from a semantic name + content-derived id — never positional.</td></tr>
+        <tr><td>log / phase</td><td>(msg, data?) / (title)</td><td>Advisory narration into the event log; not control flow.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>b · the supervisor MCP server — <code>keel mcp</code> <span class="nb">ENTIRELY NEW</span></h3>
+  <p class="small" style="max-width:78ch">A stdio MCP server that is a thin client of the daemon socket — no second control
+  plane, no direct journal access. Admin token → full supervision; a run token → least-privilege instance scoped to
+  exactly one run. All output passes capability-token redaction; <code>launch_saved_workflow</code> never returns the
+  minted capability. <code>children_of</code> is a filter on <code>list_runs</code>, not a fourteenth tool.</p>
+  <div class="tblwrap rv" style="border-color:#69402e">
+    <table>
+      <thead><tr><th>tool</th><th>result</th></tr></thead>
+      <tbody>
+        <tr><td>list_runs</td><td>Bounded newest-first run summary page; optional <code>children_of</code> returns direct children only. Admin.</td></tr>
+        <tr><td>watch_run</td><td>Compact status / phase / blockage — the ~100-token poll target.</td></tr>
+        <tr><td>get_run_detail</td><td>The canonical <code>RunProjection</code>, optionally with the per-node report.</td></tr>
+        <tr><td>get_run_blockage</td><td>Waiting reason; an <code>approvalId</code> when a human gate is pending.</td></tr>
+        <tr><td>tail_checkpoints</td><td>Bounded page of durable <code>checkpoint</code> frames: <code>{frames, nextCursor}</code>.</td></tr>
+        <tr><td>tail_events</td><td>Bounded durable-event page, optionally filtered by type. Never an unbounded stream.</td></tr>
+        <tr><td>send_signal</td><td>Durable signal delivery + wake-start acknowledgement — the steer channel.</td></tr>
+        <tr><td>decide_approval</td><td>Approve or deny an <code>approvalId</code>, with note and optional <code>grantedCaps</code>. Admin.</td></tr>
+        <tr><td>interrupt_run</td><td>Durable, crash-like stop of a non-terminal run; explicit resume required.</td></tr>
+        <tr><td>resume_run</td><td>Resume an interrupted or otherwise resumable run.</td></tr>
+        <tr><td>launch_saved_workflow</td><td>Launch <code>name</code> or <code>name@version</code>; returns only <code>runId</code>.</td></tr>
+        <tr><td>wait_for_run</td><td>Next terminal <em>or parked</em> outcome — terminal supervisors poll <code>watch_run</code> or loop waits.</td></tr>
+        <tr><td>get_state</td><td>Run-scoped state snapshot, optionally one namespace — the read side of <code>ctx.state</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>c · CLI verbs — <code>keel &lt;command&gt;</code></h3>
+  <div class="tblwrap rv">
+    <table>
+      <thead><tr><th>verb</th><th>does</th></tr></thead>
+      <tbody>
+        <tr><td>daemon</td><td>Start the daemon (foreground) — owns the journal and runs workflows.</td></tr>
+        <tr><td>launch · run</td><td>Start a run from client-captured workflow source; <code>run</code> waits and prints the result.</td></tr>
+        <tr><td>watch · get · output · report · list</td><td>Stream a run’s events (cursor flags: <code>--from/--after-seq/--tail</code>); print projection, terminal output, per-node digest; list runs.</td></tr>
+        <tr><td>signal · approve · deny</td><td>Deliver a signal payload / decide a <code>ctx.human</code> gate. Ack = durable delivery + wake-start.</td></tr>
+        <tr><td>resume · interrupt · retry</td><td>Resume a parked/incomplete run; durable interrupt until explicit resume; re-run a failed run from its failed step.</td></tr>
+        <tr><td>rewind · fork</td><td>Discard everything after a step and re-run; copy a run into a new independent run.</td></tr>
+        <tr><td>workflow …</td><td>Saved-workflow registry: save / install / list / show / source / launch / run / enable / disable. Promotion is review-gated (§07).</td></tr>
+        <tr><td>schedule · workspace · profiles · settings</td><td>Cron schedules; retained workspace inspect / diff / merge / discard; agent-profile catalog; daemon settings catalog.</td></tr>
+        <tr class="new"><td>mcp<span class="nb">NEW</span></td><td>Serve the 13 supervisor tools over MCP stdio (table b).</td></tr>
+        <tr class="new"><td>gc --prune-runs<span class="nb">NEW FLAGS</span></td><td><code>keel gc</code> pre-existed (definitions, cache, artifacts). New, opt-in: <code>--prune-runs [--run-ttl 7d]</code> deletes expired terminal one-off run history; saved workflows exempt.</td></tr>
+        <tr><td>tui · web · execute · link · help</td><td>Interactive terminal browser; local HTTP/SSE + React UI; stateless control scripts; SDK link; help.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>d · effect types &amp; run states</h3>
+  <p class="small">Every journal row carries an <code>effect_type</code> — the complete enum, five members ours:</p>
+  <div class="chips">
+    <span class="chip">pure</span><span class="chip">effectful</span><span class="chip">command</span>
+    <span class="chip">completion_check</span>
+    <span class="chip new">checkpoint</span><span class="chip new">drain_signals</span>
+    <span class="chip new">state_write</span><span class="chip new">spawn</span><span class="chip new">wait_run</span>
+    <span class="chip">workspace_setup</span><span class="chip">ambient</span>
+  </div>
+  <p class="small" style="margin-top:18px">Run status — dashed chips are parked states (durable, zero-cost, resumable):</p>
+  <div class="chips">
+    <span class="chip">running</span>
+    <span class="chip park">waiting-timer</span><span class="chip park">waiting-human</span>
+    <span class="chip park">waiting-signal</span><span class="chip park">waiting-approval</span>
+    <span class="chip park">interrupted</span>
+    <span class="chip">finished</span><span class="chip">failed</span><span class="chip">cancelled</span><span class="chip">continued</span>
+  </div>
+  <div class="note" style="margin-top:26px"><b>Version ledger.</b> New <code>ctx</code> surface bumped
+  <code>WORKFLOW_SDK_ABI_VERSION</code> 12 → 13 (checkpoint / drain / state) → <b>14</b> (spawn / waitRun) — checked with
+  strict equality at launch <em>and</em> resume, so an old definition fails deterministically instead of misbehaving.
+  Journal <code>SCHEMA_VERSION</code> 22 → <b>24</b>: v23 added the materialized <code>state</code> table, v24 the
+  launch-authority snapshot and capability-ceiling columns. All migrations are additive and tested on a copied real DB.</div>
+</section>
+<section id="trust">
+  <div class="secno"><span class="no">§07</span><h2>Governance &amp; trust — <em>untrusted code, trusted submitter</em></h2><span class="rule"></span></div>
+  <p>The deployment target is deliberately narrow: <strong>one daemon, one box</strong> —
+  possibly remote, never multi-machine. Agents author workflow code; the operator’s own
+  client submits it. So the adversary is not the client — it is the <em>workflow source
+  running inside the realm</em>, which will try to shed whatever restrictions it was launched
+  under. The submitter is trusted; the code is not.</p>
+  <div class="cols c3" style="margin-top:22px">
+    <div class="card new rv">
+      <div class="tag" style="color:var(--new)">ceilings · new</div>
+      <h4>effective = min(declared, ceiling)</h4>
+      <p>Workflow code self-declares its capabilities (tool policy, fs, shell, network,
+      secrets). A submitter token carries a named ceiling profile
+      (e.g.&nbsp;<code>untrusted-default</code>) that the daemon snapshots into the run at
+      launch. A declaration above the ceiling <strong>fails closed at launch</strong> with
+      <code>capability_ceiling_exceeded</code> — never a silent downgrade, which would change
+      effect identity behind the author’s back.</p>
+      <p>The ceiling is re-asserted at runtime on every boundary: agent, agent session,
+      command, completion check, <em>and workspace-setup commands</em> — five call sites in
+      <code>realm-host.ts</code>.</p>
+    </div>
+    <div class="card new rv">
+      <div class="tag" style="color:var(--new)">escalation · new</div>
+      <h4>Code requests; authority grants</h4>
+      <p>A workflow that needs more than its ceiling doesn’t fail — it parks:
+      <code>ctx.human({ requestedCaps })</code>. A supervisor reviews over MCP and answers
+      <code>decide_approval(…, grantedCaps)</code>. The grant is durable approval data,
+      journaled with the decision, and may exceed the ceiling — that is the point.</p>
+      <p>Authority propagates with lineage, not by accident: spawned children copy the
+      parent’s <em>current</em> snapshot at spawn time, <code>continueAsNew</code> successors
+      and forks carry it too — the three escape routes a hostile workflow would try (§08).</p>
+    </div>
+    <div class="card new rv">
+      <div class="tag" style="color:var(--new)">promotion · new</div>
+      <h4>Review-gated registry</h4>
+      <p>One-off runs are ephemeral (opt-in GC after a TTL). Long-lived flows get promoted to
+      the saved registry — and when any submitter credential is configured, <em>every</em>
+      promotion requires an approved dedicated <code>review:</code> gate whose run executed
+      the <strong>exact definition hash</strong> being promoted. A workflow’s own
+      <code>ship</code> gate cannot satisfy it; source that never ran cannot skip it.
+      Registry entries are immutable: <code>name@version → definition hash</code>, so a flow
+      that runs unchanged for weeks is tamper-proof by construction.</p>
+    </div>
+  </div>
+
+  <h3>What is deliberately <em>not</em> defended</h3>
+  <div class="note" style="border-color:#69402e">
+    <b>The box is the boundary — stated plainly.</b>
+    Socket access is admin-equivalent, full trust: anyone who can reach the daemon’s unix
+    socket can do anything, so the daemon is never network-exposed (ingress is Tailscale/SSH
+    to the box). A run that has been <em>granted</em> write/command capabilities acts as the
+    daemon user on that box. Provider tool flags are policy, not an OS jail; the network
+    capability is advisory until a host-level egress firewall backs it. Keel’s realm confines
+    the workflow <em>body</em>; granted effects run with real authority. Hence the ops
+    posture in <code>docs/deployment-hardening.md</code>: dedicated non-privileged user,
+    disposable volume, only the credentials the box needs, egress allowlist, rebuildable
+    “cattle” VM. Per-agent bubblewrap/Landlock remains future defense-in-depth, not a current
+    guarantee.
+  </div>
+</section>
+
+<section id="evidence">
+  <div class="secno"><span class="no">§08</span><h2>Evidence</h2><span class="rule"></span></div>
+  <p>Durability claims are cheap; here is what was actually done to this system. The
+  autoresearch workload ran as a saved workflow under a deterministic scripted provider
+  (durability exercised for free, zero model tokens), supervised by a <em>real</em>
+  <code>keel mcp</code> stdio process — and every item of the chaos matrix passed
+  (<code>docs/designs/workload-test-results.md</code>).</p>
+  <div class="matrix" style="margin-top:24px">
+    <div class="mx rv"><div class="head"><b>1 · SIGKILL mid-turn</b><span class="pass">PASS</span></div>
+      <p>Daemon killed while <code>experiment:1</code> was pending. Restart: completed prefix
+      replayed, the pending provider call re-executed (at-least-once), journal recorded one
+      completed attempt, checkpoint timeline duplicate-free.</p></div>
+    <div class="mx rv"><div class="head"><b>2 · delayed restart</b><span class="pass">PASS</span></div>
+      <p>Killed at <code>waiting-timer</code>; two steer signals inserted durably while no
+      daemon existed; restart delayed past the deadline. Both steers arrived FIFO in the next
+      iteration’s drain.</p></div>
+    <div class="mx rv"><div class="head"><b>3 · MCP steer mid-run</b><span class="pass">PASS</span></div>
+      <p>Real stdio MCP client sent <code>send_signal</code> while a turn was in flight.
+      “focus on parser” appeared in the next turn’s prompt and in that iteration’s checkpoint
+      payload.</p></div>
+    <div class="mx rv"><div class="head"><b>4 · edit + rerun override</b><span class="pass">PASS</span></div>
+      <p>Only the final iteration’s prompt changed → re-executed suffix was exactly
+      <code>experiment:2</code>; its byte-identical output triggered early cutoff and the
+      recorder replayed untouched.</p></div>
+    <div class="mx rv"><div class="head"><b>5 · approval park</b><span class="pass">PASS</span></div>
+      <p>Run parked <code>waiting_human</code>; MCP <code>decide_approval(…, "approved",
+      "ship it")</code> completed the run with the decision journaled.</p></div>
+    <div class="mx rv"><div class="head"><b>6 · cursor resume</b><span class="pass">PASS</span></div>
+      <p>MCP client read two checkpoint frames, persisted <code>nextCursor</code>, died. A
+      fresh process resumed from the cursor: union = all four frames, monotonic seqs, zero
+      overlap.</p></div>
+  </div>
+  <p class="small" style="margin-top:16px">One phrase needed precision: a pending external
+  effect is at-least-once, so the SIGKILL’d provider invocation genuinely ran twice. “No
+  duplicate agent turns” means no duplicate <em>completed journal attempt or durable
+  event</em> — a literal single-invocation guarantee would contradict the crash model, and
+  keel does not pretend otherwise.</p>
+
+  <h3>What the adversarial review caught — and what we hardened</h3>
+  <p>Before merge, an adversarial review of the full diff (15 commits, 82 files) verified
+  every finding against source: <strong>3 critical · 7 major · 11 minor</strong>
+  (<code>docs/reviews/onyx-extensions-review.md</code>). Its headline: the replay kernel work
+  was sound, but the first cut of the Phase-8 ceiling model had three full-bypass routes —
+  all of them the “code sheds its ceiling” attack the model exists to stop:</p>
+  <div class="tblwrap rv" style="margin-top:16px">
+    <table>
+      <thead><tr><th>finding</th><th>the escape</th><th>the fix (verified in current source)</th></tr></thead>
+      <tbody>
+        <tr><td>C1</td><td>Workspace-<em>setup</em> commands ran arbitrary shell with no ceiling check — <code>setup:{commands:[{run:"curl…|sh"}]}</code> executed as the daemon user under a read-only ceiling.</td><td>Setup path now asserts run capabilities like every other boundary (<code>realm-host.ts:1720</code>).</td></tr>
+        <tr><td>C2</td><td><code>continueAsNew</code> dropped the launch-authority snapshot — hop once, and the successor ran ceiling-free. Fully self-serve.</td><td>Successor row carries <code>launchAuthorityJson</code> (<code>realm-host.ts:4294</code>).</td></tr>
+        <tr><td>C3</td><td><code>fork</code> dropped the snapshot too — and the gateway handed the submitter a fresh capability for the fork: fork, resume, run the suffix unceiled.</td><td>Fork copies the snapshot (<code>store.ts:2199</code>); spawn had done this correctly all along.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The majors landed as fixes too, verifiable in the code and docs this page was built
+  from: the promotion gate now fails <em>closed</em> for never-run or modified source with a
+  dedicated <code>review:</code> approval kind (M1 — <code>deployment-hardening.md</code>);
+  artifact GC is actually invoked, so pruned one-off runs reclaim their bytes (M2 —
+  <code>gateway.ts:711</code>); run-history pruning became an explicit opt-in
+  (<code>keel gc --prune-runs --run-ttl 7d</code>, M3); rewind/fork over spawn-bearing
+  prefixes and spawn-handler error routing were tightened (M6/M7). An honest residue remains
+  documented rather than papered over — see §07’s “not defended” list.</p>
+</section>
+
+<footer>
+  <b>Sources</b> — every claim on this page traces to the repo at the current checkout:
+  DESIGN.md · USAGE.md · docs/designs/onyx-extensions-plan.md · docs/designs/ctx-state-design.md ·
+  docs/designs/workload-test-results.md · docs/reviews/onyx-extensions-review.md · docs/mcp.md ·
+  docs/events.md · docs/control-surfaces.md · docs/deployment-hardening.md ·
+  src/kernel/ctx.ts · src/journal/{types,schema}.ts · src/workflow-definitions/abi.ts ·
+  src/cli/keel.ts · workflows/autoresearch/autoresearch.workflow.ts<br>
+  <b>Fork</b> — zackleman/keel, branch onyx-extensions, of kcosr/keel (MIT). Explainer generated 2026-07-12.
+  Orange marks fork additions; steel is upstream. If this page and the code ever disagree, the code wins.
+</footer>
+
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var toReveal = [].slice.call(document.querySelectorAll('svg[data-reveal], .rv'));
+  if (reduce || !('IntersectionObserver' in window)) {
+    toReveal.forEach(function(el){ el.classList.add('in'); });
+  } else {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -8% 0px' });
+    toReveal.forEach(function(el){ io.observe(el); });
+  }
+
+  // scrollspy
+  var links = [].slice.call(document.querySelectorAll('nav#rail a.s'));
+  var byId = {};
+  links.forEach(function(a){ byId[a.getAttribute('href').slice(1)] = a; });
+  var secs = links.map(function(a){ return document.getElementById(a.getAttribute('href').slice(1)); })
+                  .filter(Boolean);
+  function setOn(id){
+    links.forEach(function(a){ a.classList.remove('on'); });
+    if (byId[id]) byId[id].classList.add('on');
+  }
+  if ('IntersectionObserver' in window) {
+    var spy = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if (e.isIntersecting) setOn(e.target.id); });
+    }, { rootMargin: '-15% 0px -75% 0px' });
+    secs.forEach(function(s){ spy.observe(s); });
+  }
+})();
+</script>
+</main>
+
+</body>
+</html>
