@@ -35,15 +35,17 @@ hardening directives must still permit the configured journal, cache, and worksp
 
 ## Submission operations
 
-- Laptop agents submit one-off captured source with the submitter token.
+- Laptop agents submit one-off captured source with the submitter token. A submitter token
+  does not grant `workflow:run`; saved workflows require a separate workflow-scoped credential.
 - Declarations above the credential's named ceiling fail at launch with
   `capability_ceiling_exceeded`; Keel does not silently downgrade them.
 - A workflow that needs more authority parks with `ctx.human({ requestedCaps })`. An
   administrator reviews the request and supplies `grantedCaps` through MCP
   `decide_approval`. The decision and grant are durable approval data.
-- Promotion to `name@version` requires that approved review gate and the promoted source
-  must hash to the exact reviewed one-off definition. Registry definition hashes remain
-  immutable.
+- When any submitter credential is configured, every promotion to `name@version` requires
+  an approved dedicated `review:` gate, including source that has never run. The promoted
+  source must hash to the exact definition executed by the review run; an ordinary in-workflow
+  gate such as `ship` cannot authorize promotion. Registry definition hashes remain immutable.
 - `keel gc` removes expired terminal one-off archives after seven days by default, then
   prunes unreferenced definitions. Saved workflow runs and definitions are exempt.
 

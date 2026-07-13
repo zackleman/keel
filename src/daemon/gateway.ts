@@ -115,6 +115,7 @@ interface ActiveDeliveryWake {
 
 const AUTH_RECHECK_MS = 100;
 const DEFAULT_DEFINITION_CACHE_MIN_AGE_MS = 60_000;
+const PROMOTION_REVIEW_KEY_PREFIX = "review:";
 const INSPECTED_RUN_ACTIONS = {
   resume: "run:resume",
   interrupt: "run:interrupt",
@@ -230,18 +231,14 @@ export class KeelOperationGateway {
       handle: async (_session, p, credential) => {
         const ref = (p.ref ?? {}) as SavedWorkflowRef;
         const launchAuthority = this.launchAuthorityForCredential(credential, true);
-        if (!launchAuthority) {
-          this.authorizeWorkflow(
-            credential,
-            ref.name,
-            typeof ref.version === "number" ? ref.version : undefined,
-            "workflow:run",
-          );
-        }
+        this.authorizeWorkflow(
+          credential,
+          ref.name,
+          typeof ref.version === "number" ? ref.version : undefined,
+          "workflow:run",
+        );
         const saved = this.opts.store.resolveSavedWorkflowRef(ref);
-        if (!launchAuthority) {
-          this.authorizeWorkflow(credential, ref.name, saved.version, "workflow:run");
-        }
+        this.authorizeWorkflow(credential, ref.name, saved.version, "workflow:run");
         const target = (p.target as string | undefined) ?? saved.defaultTarget ?? undefined;
         const res = await this.opts.api.launchSavedWorkflow({
           ref,
@@ -793,22 +790,29 @@ export class KeelOperationGateway {
   }
 
   private assertPromotionReviewed(req: SaveWorkflowRequest): void {
-    const oneOffRuns = this.opts.store
-      .listRuns()
-      .filter((run) => !run.workflowRef?.startsWith("saved:"));
-    if (oneOffRuns.length === 0) return;
+    const launchAuthorityRegimeActive =
+      this.opts.store.db
+        .query<{ active: number }, []>(
+          "SELECT EXISTS(SELECT 1 FROM capabilities WHERE ceiling_profile IS NOT NULL) AS active",
+        )
+        .get()?.active === 1;
+    if (!launchAuthorityRegimeActive) return;
 
     const snapshot = snapshotWorkflowSource(this.opts.store, req.source, {
       name: req.workflowName ?? req.name,
       nowMs: this.opts.clock(),
       cacheRoot: this.opts.definitionCacheRoot,
     }).snapshot;
-    const hasOneOffRun = oneOffRuns.some((run) => run.definitionVersion === snapshot.hash);
-    if (!hasOneOffRun) return;
-
     const review = req.reviewApproval;
     if (!review) {
-      throw new Error("promoting a one-off workflow requires reviewApproval { runId, key }");
+      throw new Error(
+        "saving a workflow while submitter credentials are configured requires reviewApproval { runId, key }",
+      );
+    }
+    if (!review.key.startsWith(PROMOTION_REVIEW_KEY_PREFIX)) {
+      throw new Error(
+        `promotion review key must start with ${JSON.stringify(PROMOTION_REVIEW_KEY_PREFIX)}`,
+      );
     }
     const run = this.opts.store.getRun(review.runId);
     if (!run) throw new Error(`review run ${review.runId} not found`);

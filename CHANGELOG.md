@@ -51,6 +51,9 @@
   ([#30](https://github.com/kcosr/keel/pull/30))
 
 ### Fixed
+- Workflow promotion now requires a definition-matched dedicated `review:` approval whenever
+  submitter governance is configured, and submitter credentials no longer bypass saved-workflow
+  `workflow:run` authorization.
 - Web schedule edits now preserve the pinned saved-workflow version and next
   fire time. Long directory listings remain scrollable inside their dialog,
   run-event watches stay connected across projection refreshes, and workflow
