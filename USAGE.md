@@ -867,7 +867,9 @@ Start the daemon with `KEEL_ADMIN_TOKEN=kc_admin_...` to bootstrap that token as
 an admin capability. Set `KEEL_SUBMITTER_TOKEN=kc_submitter_...` on the daemon and
 submitting clients to use the restrictive launch tier. Submitter declarations above the
 named ceiling fail with structured `capability_ceiling_exceeded` errors; they are never
-silently downgraded. Admin is required for daemon-wide `list` and
+silently downgraded. A submitter credential authorizes one-off submission only; launching a
+saved workflow still requires a workflow-scoped `workflow:run` credential. Admin is required
+for daemon-wide `list` and
 `approve`/`deny` of `ctx.human` gates. Raw run capabilities are printed only
 with explicit `--emit-capability`; avoid this in transcripts unless you intend
 to handle the token as a secret.
@@ -2033,10 +2035,13 @@ Refcounts are recomputed from the journal, so GC self-heals after rewind/fork.
 
 ### Reviewed workflow promotion
 
+When any submitter credential is configured,
 `keel workflow save <name> <workflow.ts> --review-run <runId> --review-key <key>` requires
-an approved `ctx.human` gate from the one-off review run. The captured source must hash to
-the exact definition executed by that run. This binds explicit review to the immutable
-`name@version` definition hash. MCP `decide_approval` accepts optional `grantedCaps`; an
+an approved `ctx.human` gate whose key starts with `review:`. This applies even when the
+captured source has never run. The source must hash to the exact definition executed by the
+review run; an ordinary in-workflow gate such as `ship` cannot authorize promotion. This
+binds explicit review to the immutable `name@version` definition hash. MCP `decide_approval`
+accepts optional `grantedCaps`; an
 approved grant expands only that run's snapshotted ceiling and is persisted with the
 approval.
 

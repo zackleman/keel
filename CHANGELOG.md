@@ -54,6 +54,9 @@
 - `continueAsNew` successors and forked runs now retain their source run's
   launch-authority ceiling, and rewind/fork reject journal ranges containing
   durable child spawns that cannot be replayed safely.
+- Workflow promotion now requires a definition-matched dedicated `review:` approval whenever
+  submitter governance is configured, and submitter credentials no longer bypass saved-workflow
+  `workflow:run` authorization.
 - Web schedule edits now preserve the pinned saved-workflow version and next
   fire time. Long directory listings remain scrollable inside their dialog,
   run-event watches stay connected across projection refreshes, and workflow

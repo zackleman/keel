@@ -6,6 +6,7 @@ import {
   type CapabilityAction,
   type CapabilityResource,
   ensureAdminCapability,
+  ensureSubmitterCapability,
   hashCapabilityToken,
 } from "../auth/capabilities.ts";
 import { JournalStore } from "../journal/store.ts";
@@ -182,11 +183,16 @@ function putCapability(
   });
 }
 
-function insertRun(store: JournalStore, runId: string, status: RunStatus = "running"): void {
+function insertRun(
+  store: JournalStore,
+  runId: string,
+  status: RunStatus = "running",
+  definitionVersion = "wf_sha256_gateway_test",
+): void {
   store.insertRun({
     runId,
     workflowName: "gateway-test",
-    definitionVersion: "wf_sha256_gateway_test",
+    definitionVersion,
     workflowRef: null,
     runTarget: dir,
     status,
@@ -396,6 +402,111 @@ describe("KeelOperationGateway", () => {
           runV1Token,
         ),
       ).resolves.toMatch(/different resource/);
+    } finally {
+      harness.close();
+    }
+  });
+
+  test("requires a dedicated matching review before any save under submitter governance", async () => {
+    const harness = createHarness();
+    const session = new FakeGatewaySession("promotion-review");
+    try {
+      ensureSubmitterCapability(
+        harness.store,
+        "kc_submitter_gateway_promotion",
+        "untrusted-default",
+        1,
+      );
+
+      await expect(
+        fail(
+          harness,
+          session,
+          "saveWorkflow",
+          { name: "reviewed-chain", source: chainUrl.source, defaultTarget: dir },
+          ADMIN_TOKEN,
+        ),
+      ).resolves.toMatch(/requires reviewApproval/);
+
+      const preview = harness.api.previewWorkflowDefinition({ source: chainUrl.source });
+      insertRun(harness.store, "run_promotion_review", "finished", preview.definitionHash);
+      harness.store.requestApproval(
+        "run_promotion_review",
+        "ship",
+        { prompt: "Ship this workflow?" },
+        2,
+      );
+      harness.store.decideApproval("run_promotion_review", "ship", { status: "approved" }, 3);
+      await expect(
+        fail(
+          harness,
+          session,
+          "saveWorkflow",
+          {
+            name: "reviewed-chain",
+            source: chainUrl.source,
+            defaultTarget: dir,
+            reviewApproval: { runId: "run_promotion_review", key: "ship" },
+          },
+          ADMIN_TOKEN,
+        ),
+      ).resolves.toMatch(/review key must start with "review:"/);
+
+      harness.store.requestApproval(
+        "run_promotion_review",
+        "review:promotion",
+        { prompt: "Promote this definition?" },
+        4,
+      );
+      harness.store.decideApproval(
+        "run_promotion_review",
+        "review:promotion",
+        { status: "approved" },
+        5,
+      );
+      await expect(
+        ok<{ definitionHash: string }>(
+          harness,
+          session,
+          "saveWorkflow",
+          {
+            name: "reviewed-chain",
+            source: chainUrl.source,
+            defaultTarget: dir,
+            reviewApproval: { runId: "run_promotion_review", key: "review:promotion" },
+          },
+          ADMIN_TOKEN,
+        ),
+      ).resolves.toMatchObject({ definitionHash: preview.definitionHash });
+    } finally {
+      harness.close();
+    }
+  });
+
+  test("submitter credentials still require workflow-scoped run authorization", async () => {
+    const harness = createHarness();
+    const session = new FakeGatewaySession("submitter-saved-workflow");
+    const submitterToken = "kc_submitter_gateway_saved_workflow";
+    try {
+      await ok(
+        harness,
+        session,
+        "saveWorkflow",
+        { name: "saved-chain", source: chainUrl.source, defaultTarget: dir },
+        ADMIN_TOKEN,
+      );
+      ensureSubmitterCapability(harness.store, submitterToken, "untrusted-default", 1);
+
+      await expect(
+        fail(
+          harness,
+          session,
+          "launchSavedWorkflow",
+          { ref: { name: "saved-chain" }, input: { n: 0 } },
+          submitterToken,
+        ),
+      ).resolves.toMatch(/does not grant workflow:run/);
+      expect(harness.store.listRuns()).toEqual([]);
     } finally {
       harness.close();
     }

@@ -97,7 +97,7 @@ describe("submission hardening", () => {
       import { type Capabilities, type Ctx } from "@kcosr/keel";
       export default async function workflow(ctx: Ctx): Promise<string> {
         const decision = await ctx.human({
-          key: "review-escalation",
+          key: "review:escalation",
           prompt: "Allow a reviewed host command?",
           requestedCaps: { fs: "workspace-write", shell: true, network: "none" },
         });
@@ -159,7 +159,7 @@ describe("submission hardening", () => {
       const saved = await submitter.saveWorkflow({
         name: "reviewed-command",
         source,
-        reviewApproval: { runId: launched.runId, key: "review-escalation" },
+        reviewApproval: { runId: launched.runId, key: "review:escalation" },
       });
       const reviewedRun = await submitter.getRun(launched.runId);
       if (!reviewedRun) throw new Error("reviewed run missing");
