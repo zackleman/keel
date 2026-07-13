@@ -43,6 +43,7 @@ import { KeelDaemon } from "../daemon/server.ts";
 import { runExecuteScript } from "../execute/runtime.ts";
 import { JournalStore } from "../journal/store.ts";
 import { runMcpServer } from "../mcp/server.ts";
+import { DEFAULT_ONE_OFF_RUN_TTL_MS } from "../policy/launch-authority.ts";
 import type {
   AgentProfileCheckResult,
   AgentProfileView,
@@ -166,7 +167,11 @@ const COMMANDS: [string, string, string][] = [
     "list|show|diff|merge|discard|gc ...",
     "inspect and manage retained agent workspaces",
   ],
-  ["gc", "", "prune unreferenced workflow definitions and cache entries"],
+  [
+    "gc",
+    "[--prune-runs [--run-ttl duration]]",
+    "prune unreferenced definitions, cache entries, and artifacts; run history only with --prune-runs",
+  ],
   ["resume", "[--detach] [--tools] <runId>", "resume a parked or incomplete run"],
   ["interrupt", "<runId> [reason]", "interrupt a non-terminal run until explicit resume"],
   [
@@ -548,8 +553,9 @@ async function dispatch(argv: string[]): Promise<number> {
       });
     }
     case "gc": {
+      const parsed = parseGcArgs(rest);
       const client = await openClient();
-      const out = await client.gcDefinitions();
+      const out = await client.gcDefinitions(parsed);
       process.stdout.write(`${JSON.stringify(out)}\n`);
       return 0;
     }
@@ -664,6 +670,38 @@ async function dispatch(argv: string[]): Promise<number> {
       process.stderr.write(`keel: unknown command "${cmd}"\n\n${topHelp()}`);
       return 2;
   }
+}
+
+export function parseGcArgs(args: string[]): { runTtlMs?: number } {
+  let pruneRuns = false;
+  let runTtlMs: number | undefined;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    if (arg === "--prune-runs") {
+      pruneRuns = true;
+    } else if (arg === "--run-ttl") {
+      runTtlMs = parseDurationMs(requireFlagValue(args, i, "--run-ttl"), "--run-ttl");
+      i += 1;
+    } else if (arg.startsWith("--run-ttl=")) {
+      runTtlMs = parseDurationMs(arg.slice("--run-ttl=".length), "--run-ttl");
+    } else {
+      throw new Error(`unknown gc flag ${arg}`);
+    }
+  }
+  if (runTtlMs !== undefined && !pruneRuns) {
+    throw new Error("--run-ttl requires --prune-runs");
+  }
+  return pruneRuns ? { runTtlMs: runTtlMs ?? DEFAULT_ONE_OFF_RUN_TTL_MS } : {};
+}
+
+function parseDurationMs(value: string, label: string): number {
+  const match = /^(\d+)(ms|s|m|h|d)$/.exec(value);
+  if (!match) throw new Error(`${label} must be a duration such as 500ms, 12h, or 7d`);
+  const unitMs = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
+  const amount = Number(match[1]);
+  const durationMs = amount * unitMs[match[2] as keyof typeof unitMs];
+  if (!Number.isSafeInteger(durationMs)) throw new Error(`${label} duration is too large`);
+  return durationMs;
 }
 
 export function parseLifecycleArgs(args: string[]): {

@@ -5,8 +5,8 @@
 ### Changed
 - Added submitter credentials with named launch-authority ceilings, launch-time over-ask
   rejection, run-scoped approval grants through MCP, review-gated immutable workflow
-  promotion, seven-day one-off archive retention, schema v24, and the remote deployment
-  hardening recipe. Trusted local/admin launches remain unrestricted.
+  promotion, opt-in seven-day one-off archive retention, schema v24, and the remote
+  deployment hardening recipe. Trusted local/admin launches remain unrestricted.
 - Added durable child workflows with journaled `ctx.spawn`/`ctx.waitRun`,
   definition pinning, crash-safe child ID reservation, child run lineage, scoped
   child capabilities, and MCP `list_runs.children_of` filtering. The workflow
@@ -277,8 +277,9 @@
 - `keel tui [runId] [--status status] [--limit n]` opens an interactive terminal
   run browser/detail/watch UI with local filtering, `subscribeEvents` backfill,
   conservative lifecycle controls, and terminal restore guards.
-- `keel gc` prunes old unreferenced workflow definition rows and rebuildable
-  materialized definition cache directories.
+- `keel gc` prunes old unreferenced workflow definition rows, rebuildable materialized
+  definition cache directories, and unreferenced artifacts. Terminal one-off run history
+  is pruned only with `--prune-runs`; `--run-ttl` overrides the default seven-day TTL.
 - Immutable workflow definition snapshots are stored by content hash and
   materialized from the journal for run execution and resume.
 - File-launched workflows can import local static `.ts`/`.tsx` helper modules
@@ -362,7 +363,7 @@
   `keel watch <runId> --output text` or `waitForRun`/`keel.wait` to observe
   follow-up progress.
 - `ctx.agent` and `ctx.agentSession().turn` default `maxRetries`, `lenient`, `onFailure`, `timeoutMs`, and `stallRetries` from each run's settings snapshot after explicit workflow and profile values, so resume/retry/rewind/fork do not observe later daemon setting edits. Codex `turn/completed` waits now receive the host-resolved per-call agent timeout.
-- `keel gc` / `gcDefinitions` use `workflowDefinition.gcTtlMs` as the default workflow definition TTL when the request does not supply `ttlMs`; `KEEL_DEFINITION_TTL_MS` is no longer honored. `codex.rpcTimeoutMs` and `codex.connectTimeoutMs` apply when the Codex provider is constructed, normally at daemon restart.
+- `keel gc` / `gcDefinitions` use `workflowDefinition.gcTtlMs` as the default workflow definition TTL when the request does not supply `ttlMs`; run-history deletion now requires an explicit `runTtlMs` (`keel gc --prune-runs`). `KEEL_DEFINITION_TTL_MS` is no longer honored. `codex.rpcTimeoutMs` and `codex.connectTimeoutMs` apply when the Codex provider is constructed, normally at daemon restart.
 - Reusable implementation/review workflows now resolve `input.repository` to a
   direct workspace, defaulting to the run target when omitted, so prompts and
   agent cwd stay aligned while still supporting manually-created git worktrees

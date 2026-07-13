@@ -224,14 +224,26 @@ export class JournalStore {
            AND r.finished_at_ms <= ?
            AND (r.workflow_ref IS NULL OR r.workflow_ref NOT LIKE 'saved:%')
            AND NOT EXISTS (
-             SELECT 1 FROM runs child WHERE child.parent_run_id = r.run_id
-           )
-           AND NOT EXISTS (
              SELECT 1 FROM agent_workspaces w
              WHERE w.run_id = r.run_id AND w.removed_at_ms IS NULL
            )`,
       )
       .all(cutoff);
+    const prunedRunIds = new Set(rows.map((row) => row.run_id));
+    const capabilityIds = this.db
+      .query<{ id: string; resource_json: string }, []>(
+        "SELECT id, resource_json FROM capabilities",
+      )
+      .all()
+      .filter((row) => {
+        const resource = JSON.parse(row.resource_json) as { kind?: unknown; runId?: unknown };
+        return (
+          resource.kind === "run" &&
+          typeof resource.runId === "string" &&
+          prunedRunIds.has(resource.runId)
+        );
+      })
+      .map((row) => row.id);
     const tables = [
       "state",
       "agent_session_turns",
@@ -248,6 +260,9 @@ export class JournalStore {
       "run_setting_snapshot_sets",
     ] as const;
     this.transaction(() => {
+      for (const capabilityId of capabilityIds) {
+        this.db.query("DELETE FROM capabilities WHERE id = ?").run(capabilityId);
+      }
       for (const row of rows) {
         for (const table of tables) {
           this.db.query(`DELETE FROM ${table} WHERE run_id = ?`).run(row.run_id);

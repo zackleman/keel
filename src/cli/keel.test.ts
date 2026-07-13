@@ -14,12 +14,14 @@ import { MockProvider } from "../agents/mock.ts";
 import { AgentProviderRegistry } from "../agents/types.ts";
 import type { DaemonClient } from "../daemon/client.ts";
 import { KeelDaemon } from "../daemon/server.ts";
+import { JournalStore } from "../journal/store.ts";
 import {
   formatListRuns,
   formatRunHeader,
   formatRunReportText,
   formatScheduleList,
   parseExecuteArgs,
+  parseGcArgs,
   parseLaunchArgs,
   parseLaunchInput,
   parseLifecycleArgs,
@@ -121,10 +123,19 @@ describe("keel CLI", () => {
       expect(out.stdout).toContain("list [--output text|json]");
       expect(out.stdout).toContain("tui [runId] [--status status] [--limit n] [--output text]");
       expect(out.stdout).toContain("mcp");
+      expect(out.stdout).toContain("gc [--prune-runs [--run-ttl duration]]");
+      expect(out.stdout).toContain("run history only with --prune-runs");
       expect(out.stdout).toContain("interrupt <runId> [reason]");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  test("gc arguments make run pruning explicit and parse duration units", () => {
+    expect(parseGcArgs([])).toEqual({});
+    expect(parseGcArgs(["--prune-runs"])).toEqual({ runTtlMs: 7 * 24 * 60 * 60 * 1000 });
+    expect(parseGcArgs(["--prune-runs", "--run-ttl=24h"])).toEqual({ runTtlMs: 86_400_000 });
+    expect(() => parseGcArgs(["--run-ttl", "1d"])).toThrow("--run-ttl requires --prune-runs");
   });
 
   test("link creates an @kcosr/keel SDK symlink for out-of-repo workflows", async () => {
@@ -1427,11 +1438,43 @@ describe("keel CLI", () => {
   );
 
   test(
-    "gc runs as an admin daemon operation",
+    "gc preserves run history by default and prunes runs and artifacts only when requested",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "keel-gc-"));
       const socketPath = join(dir, "keel.sock");
       const dbPath = join(dir, "keel.db");
+      const seed = JournalStore.open(dbPath);
+      seed.insertRun({
+        runId: "expired-one-off",
+        workflowName: "one-off",
+        definitionVersion: "wf_sha256_expired",
+        workflowRef: "client:test",
+        runTarget: dir,
+        status: "finished",
+        parentRunId: null,
+        tenantId: null,
+        inputRef: "null",
+        outputRef: "null",
+        errorJson: null,
+        heartbeatAtMs: null,
+        runtimeOwnerId: null,
+        launchAuthorityJson: null,
+        createdAtMs: 1,
+        finishedAtMs: 2,
+      });
+      const artifactBytes = new TextEncoder().encode("x".repeat(2_000));
+      seed.putArtifact("expired-artifact", artifactBytes, 0);
+      seed.putJournalRow({
+        runId: "expired-one-off",
+        stableKey: "large-result",
+        effectType: "pure",
+        status: "completed",
+        version: "v1",
+        inputHash: "input",
+        resultArtifact: "expired-artifact",
+      });
+      seed.close();
+
       const daemon = new KeelDaemon({
         socketPath,
         dbPath,
@@ -1440,18 +1483,29 @@ describe("keel CLI", () => {
       });
       await daemon.start();
       try {
-        const out = await runCli(["gc"], dir, {
+        const env = {
           KEEL_SOCKET: socketPath,
           KEEL_DB: dbPath,
           KEEL_DIR: dir,
           KEEL_ADMIN_TOKEN: "kc_admin_gc_test",
-        });
-        expect(out.code).toBe(0);
-        expect(JSON.parse(out.stdout)).toEqual({
-          workflowDefinitionsRemoved: 0,
-          definitionCacheEntriesRemoved: 0,
-          oneOffRunsRemoved: 0,
-        });
+        };
+        const kept = await runCli(["gc"], dir, env);
+        expect(kept.code).toBe(0);
+        expect(JSON.parse(kept.stdout).oneOffRunsRemoved).toBe(0);
+
+        const afterDefaultGc = JournalStore.open(dbPath);
+        expect(afterDefaultGc.getRun("expired-one-off")).not.toBeNull();
+        expect(afterDefaultGc.getArtifactData("expired-artifact")).toEqual(artifactBytes);
+        afterDefaultGc.close();
+
+        const pruned = await runCli(["gc", "--prune-runs", "--run-ttl", "1ms"], dir, env);
+        expect(pruned.code).toBe(0);
+        expect(JSON.parse(pruned.stdout).oneOffRunsRemoved).toBe(1);
+
+        const afterRunGc = JournalStore.open(dbPath);
+        expect(afterRunGc.getRun("expired-one-off")).toBeNull();
+        expect(afterRunGc.getArtifactData("expired-artifact")).toBeNull();
+        afterRunGc.close();
       } finally {
         daemon.stop();
         rmSync(dir, { recursive: true, force: true });
