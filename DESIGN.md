@@ -1008,7 +1008,9 @@ The session path is intentionally fail-closed: providers must declare stable
 session support; changing a participant workspace changes identity; and runs
 with session rows cannot be rerun, rewound, or forked.
 `continueAsNew` starts a fresh run and does
-not carry backend session tokens. Provider session-token trace events are
+not carry backend session tokens. It does carry the run's launch-authority
+ceiling, including any capabilities widened by an approved escalation, just as
+`ctx.spawn` already does. Provider session-token trace events are
 consumed for write-ahead state only and are not persisted in the durable event
 stream.
 

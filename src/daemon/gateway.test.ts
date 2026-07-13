@@ -197,6 +197,7 @@ function insertRun(store: JournalStore, runId: string, status: RunStatus = "runn
     errorJson: null,
     heartbeatAtMs: null,
     runtimeOwnerId: null,
+    launchAuthorityJson: null,
     createdAtMs: 1,
     finishedAtMs: status === "finished" ? 2 : null,
   });

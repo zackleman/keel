@@ -53,11 +53,8 @@ export interface RunRow {
   finishedAtMs: number | null;
 }
 
-export type NewRunRow = Omit<
-  RunRow,
-  "finishedAtMs" | "workflowRef" | "runTarget" | "launchAuthorityJson"
-> &
-  Partial<Pick<RunRow, "finishedAtMs" | "workflowRef" | "runTarget" | "launchAuthorityJson">>;
+export type NewRunRow = Omit<RunRow, "finishedAtMs" | "workflowRef" | "runTarget"> &
+  Partial<Pick<RunRow, "finishedAtMs" | "workflowRef" | "runTarget">>;
 
 /** A dependency edge: a prior step output this row's inputHash incorporated. */
 export interface InputDep {

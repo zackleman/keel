@@ -147,6 +147,7 @@ describe("getBlockage", () => {
       errorJson: null,
       heartbeatAtMs: opts.heartbeatAtMs ?? null,
       runtimeOwnerId: opts.runtimeOwnerId ?? null,
+      launchAuthorityJson: null,
       createdAtMs: 0,
     });
   }

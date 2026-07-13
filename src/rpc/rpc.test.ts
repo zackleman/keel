@@ -209,6 +209,7 @@ function insertWorkspaceFixture(
     errorJson: null,
     heartbeatAtMs: opts.heartbeatAtMs ?? null,
     runtimeOwnerId: opts.runtimeOwnerId ?? null,
+    launchAuthorityJson: null,
     createdAtMs: 1,
     finishedAtMs: ["finished", "failed", "cancelled", "continued"].includes(opts.runStatus)
       ? 2
@@ -569,6 +570,7 @@ describe("saved workflow RPC", () => {
       errorJson: null,
       heartbeatAtMs: null,
       runtimeOwnerId: null,
+      launchAuthorityJson: null,
       createdAtMs: 2,
       finishedAtMs: 2,
     });
@@ -614,6 +616,7 @@ describe("saved workflow RPC", () => {
       errorJson: null,
       heartbeatAtMs: null,
       runtimeOwnerId: null,
+      launchAuthorityJson: null,
       createdAtMs: 1,
       finishedAtMs: 2,
     });
@@ -705,6 +708,7 @@ describe("saved workflow RPC", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 1,
         finishedAtMs: 1,
       });
@@ -1654,6 +1658,7 @@ describe("workspace lifecycle operations", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 1,
         finishedAtMs: 2,
         runTarget: source,
@@ -1738,6 +1743,7 @@ describe("workspace lifecycle operations", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 1,
         finishedAtMs: 2,
         runTarget: source,
@@ -1817,6 +1823,7 @@ describe("workspace lifecycle operations", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 1,
         finishedAtMs: 2,
         runTarget: source,
@@ -1900,6 +1907,7 @@ describe("workspace lifecycle operations", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 1,
         finishedAtMs: 2,
         runTarget: repo,
@@ -1995,6 +2003,7 @@ describe("workspace lifecycle operations", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 1,
         finishedAtMs: 2,
         runTarget: repo,
@@ -2502,6 +2511,7 @@ describe("lifecycle start methods", () => {
       errorJson: null,
       heartbeatAtMs: null,
       runtimeOwnerId: null,
+      launchAuthorityJson: null,
       createdAtMs: 1,
     });
     const api = keel(store);
@@ -2557,6 +2567,7 @@ function seedReportRun(
     errorJson: null,
     heartbeatAtMs: null,
     runtimeOwnerId: null,
+    launchAuthorityJson: null,
     createdAtMs: 1,
     finishedAtMs: 1,
   });

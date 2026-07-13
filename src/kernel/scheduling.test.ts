@@ -285,6 +285,7 @@ function insertLifecycleRun(
     errorJson: status === "failed" ? JSON.stringify({ name: "Error", message: "old" }) : null,
     heartbeatAtMs: null,
     runtimeOwnerId: null,
+    launchAuthorityJson: null,
     createdAtMs: 1,
     finishedAtMs: status === "failed" ? 1 : null,
   });

@@ -150,4 +150,51 @@ describe("ctx.spawn durable child workflows", () => {
     expect(children).toHaveLength(2);
     expect(new Set(children.map((run) => run.runId)).size).toBe(2);
   });
+
+  test("refuses to rewind past a completed spawn", async () => {
+    const store = JournalStore.memory();
+    saveChild(store);
+    let id = 0;
+    const kernel = new RealmKernel(store, { idgen: () => `run_${id++}` });
+    const workflow = {
+      name: "rewind-spawn-parent",
+      source: `
+        import { type Ctx, passthrough } from "@kcosr/keel";
+        const value = passthrough<number>();
+        export default async function workflow(ctx: Ctx): Promise<number> {
+          await ctx.step("before-spawn", value, { value: 1 }, ({ value }) => value);
+          const child = await ctx.spawn("spawn", {
+            workflow: "spawn-child@1",
+            input: { value: 2 },
+          });
+          const outcome = await ctx.waitRun<number>("wait", child);
+          return outcome.output ?? 0;
+        }
+      `,
+    };
+
+    const result = await kernel.run<number>(workflow, null, { target: TARGET });
+    expect(result.status).toBe("finished");
+    expect(store.listRuns().filter((run) => run.parentRunId === result.runId)).toHaveLength(1);
+
+    await expect(kernel.rewind(result.runId, "before-spawn")).rejects.toThrow(
+      /cannot be rewound.*spawn/i,
+    );
+    expect(store.listRuns().filter((run) => run.parentRunId === result.runId)).toHaveLength(1);
+  });
+
+  test("refuses to fork a run when the copied prefix contains a spawn", async () => {
+    const store = JournalStore.memory();
+    saveChild(store);
+    let id = 0;
+    const kernel = new RealmKernel(store, { idgen: () => `run_${id++}` });
+
+    const result = await kernel.run(parent, { workflow: "spawn-child@1" }, { target: TARGET });
+    expect(result.status).toBe("finished");
+
+    expect(() => kernel.fork(result.runId, { newRunId: "forked" })).toThrow(
+      /cannot be forked.*spawn/i,
+    );
+    expect(store.getRun("forked")).toBeNull();
+  });
 });

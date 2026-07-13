@@ -706,6 +706,7 @@ describe("schema migrations", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 2,
       });
       store.putWorkflowDefinition({

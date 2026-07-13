@@ -205,7 +205,7 @@ export class JournalStore {
         $errorJson: row.errorJson,
         $heartbeatAtMs: row.heartbeatAtMs,
         $runtimeOwnerId: row.runtimeOwnerId,
-        $launchAuthorityJson: row.launchAuthorityJson ?? null,
+        $launchAuthorityJson: row.launchAuthorityJson,
         $createdAtMs: row.createdAtMs,
         $finishedAtMs: row.finishedAtMs ?? null,
       });
@@ -512,6 +512,39 @@ export class JournalStore {
       )
       .get(runId);
     return (row?.c ?? 0) > 0;
+  }
+
+  hasSpawnRowsAfter(runId: string, stableKey: string): boolean {
+    const cutoff = this.db
+      .query<{ seq: number | null }, [string, string]>(
+        "SELECT MAX(seq) AS seq FROM journal WHERE run_id = ? AND stable_key = ?",
+      )
+      .get(runId, stableKey)?.seq;
+    if (cutoff == null) return false;
+    return (
+      this.db
+        .query<{ present: number }, [string, number]>(
+          "SELECT 1 AS present FROM journal WHERE run_id = ? AND seq > ? AND effect_type = 'spawn' LIMIT 1",
+        )
+        .get(runId, cutoff) !== null
+    );
+  }
+
+  hasSpawnRowsInPrefix(runId: string, atStableKey: string | null): boolean {
+    const cutoff = atStableKey
+      ? (this.db
+          .query<{ seq: number | null }, [string, string]>(
+            "SELECT MAX(seq) AS seq FROM journal WHERE run_id = ? AND stable_key = ?",
+          )
+          .get(runId, atStableKey)?.seq ?? null)
+      : null;
+    const sql =
+      cutoff === null
+        ? "SELECT 1 AS present FROM journal WHERE run_id = ? AND effect_type = 'spawn' LIMIT 1"
+        : "SELECT 1 AS present FROM journal WHERE run_id = ? AND seq <= ? AND effect_type = 'spawn' LIMIT 1";
+    return cutoff === null
+      ? this.db.query<{ present: number }, [string]>(sql).get(runId) !== null
+      : this.db.query<{ present: number }, [string, number]>(sql).get(runId, cutoff) !== null;
   }
 
   getAgentSession(runId: string, agentKey: string): AgentSessionRow | null {
@@ -2148,6 +2181,7 @@ export class JournalStore {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: src.launchAuthorityJson,
         createdAtMs: atMs,
       });
       this.copyRunProfileSnapshot(srcRunId, newRunId);

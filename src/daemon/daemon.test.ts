@@ -590,6 +590,7 @@ describe("daemon multi-client over the socket", () => {
       errorJson: null,
       heartbeatAtMs: 0,
       runtimeOwnerId: "dead-daemon",
+      launchAuthorityJson: null,
       createdAtMs: 1,
       finishedAtMs: null,
     });
@@ -612,6 +613,7 @@ describe("daemon multi-client over the socket", () => {
       errorJson: null,
       heartbeatAtMs: null,
       runtimeOwnerId: null,
+      launchAuthorityJson: null,
       createdAtMs: 1,
       finishedAtMs: 2,
     });
@@ -636,6 +638,7 @@ describe("daemon multi-client over the socket", () => {
       errorJson: null,
       heartbeatAtMs: null,
       runtimeOwnerId: null,
+      launchAuthorityJson: null,
       createdAtMs: 1,
       finishedAtMs: 2,
     });
@@ -1341,6 +1344,7 @@ describe("CAS ownership fence", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 0,
       });
       // daemon A claims with a fresh heartbeat
@@ -2023,6 +2027,7 @@ describe("kill -9 daemon recovery", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 1,
       });
       requireUnsupportedSdkAbi(setup, snapshot.hash);

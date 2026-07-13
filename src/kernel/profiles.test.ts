@@ -260,6 +260,7 @@ describe("profiles through the realm", () => {
       errorJson: null,
       heartbeatAtMs: null,
       runtimeOwnerId: null,
+      launchAuthorityJson: null,
       createdAtMs: 1,
     });
     const kernel = new RealmKernel(store, { idgen: () => "unused" });
