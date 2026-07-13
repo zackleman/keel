@@ -51,6 +51,9 @@
   ([#30](https://github.com/kcosr/keel/pull/30))
 
 ### Fixed
+- `continueAsNew` successors and forked runs now retain their source run's
+  launch-authority ceiling, and rewind/fork reject journal ranges containing
+  durable child spawns that cannot be replayed safely.
 - Web schedule edits now preserve the pinned saved-workflow version and next
   fire time. Long directory listings remain scrollable inside their dialog,
   run-event watches stay connected across projection refreshes, and workflow

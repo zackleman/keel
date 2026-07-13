@@ -17,6 +17,7 @@ describe("one-off run retention", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 1,
         finishedAtMs: 2,
       };
@@ -50,6 +51,7 @@ describe("one-off run retention", () => {
         errorJson: "{}",
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 90,
         finishedAtMs: 95,
       });

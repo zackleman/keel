@@ -104,6 +104,7 @@ describe("supervisor MCP tools", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: Date.now(),
         finishedAtMs: Date.now(),
       });

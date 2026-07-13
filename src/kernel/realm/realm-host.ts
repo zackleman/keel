@@ -864,6 +864,11 @@ export class RealmKernel {
     if (!this.store.getLatestAttempt(runId, toStableKey)) {
       throw new Error(`cannot rewind to unknown step "${toStableKey}"`);
     }
+    if (this.store.hasSpawnRowsAfter(runId, toStableKey)) {
+      throw new Error(
+        `run ${runId} cannot be rewound to "${toStableKey}" because the discarded suffix contains spawn rows; start a fresh run instead`,
+      );
+    }
     const runSecrets = normalizeRunSecrets(opts.runSecrets, {
       path: "RealmKernel.startRewind.runSecrets",
     });
@@ -899,6 +904,11 @@ export class RealmKernel {
     if (!TERMINAL.has(src.status)) {
       throw new Error(
         `cannot fork a non-terminal run (is ${src.status}); fork a finished/failed/continued run, or rewind first`,
+      );
+    }
+    if (this.store.hasSpawnRowsInPrefix(runId, opts.atStableKey ?? null)) {
+      throw new Error(
+        `run ${runId} cannot be forked because the copied journal prefix contains spawn rows; start a fresh run instead`,
       );
     }
     const newId = opts.newRunId ?? this.idgen();
@@ -4269,6 +4279,7 @@ export class RealmKernel {
                   errorJson: null,
                   heartbeatAtMs: null,
                   runtimeOwnerId: null,
+                  launchAuthorityJson: run.launchAuthorityJson,
                   createdAtMs: at,
                 });
                 this.store.copyRunProfileSnapshot(runId, nextId);
@@ -4284,7 +4295,10 @@ export class RealmKernel {
               cleanupTerminalRunWorkspaces(this.store, runId, "continued", at);
               this.secrets?.wipe(runId);
               // start the successor's execution OUTSIDE the transaction
-              void this.execute(nextId, workflowUrl, m.input);
+              void this.execute(nextId, workflowUrl, m.input).catch(() => {
+                // Successor failures are persisted by execute; no caller owns this
+                // internally chained promise.
+              });
               finish(() =>
                 resolve({ runId, status: "continued", output: { continuedTo: nextId } as O }),
               );

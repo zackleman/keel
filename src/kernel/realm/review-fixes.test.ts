@@ -212,6 +212,7 @@ describe("#2 resume uses immutable workflow snapshots", () => {
       errorJson: null,
       heartbeatAtMs: null,
       runtimeOwnerId: null,
+      launchAuthorityJson: null,
       createdAtMs: 1,
     });
 
@@ -235,6 +236,7 @@ describe("#2 resume uses immutable workflow snapshots", () => {
       errorJson: null,
       heartbeatAtMs: null,
       runtimeOwnerId: null,
+      launchAuthorityJson: null,
       createdAtMs: 1,
     });
 

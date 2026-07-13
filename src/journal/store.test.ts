@@ -18,6 +18,7 @@ function newRun(runId: string): NewRunRow {
     errorJson: null,
     heartbeatAtMs: null,
     runtimeOwnerId: null,
+    launchAuthorityJson: null,
     createdAtMs: 1000,
   };
 }

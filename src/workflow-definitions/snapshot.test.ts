@@ -670,6 +670,7 @@ describe("workflow definition snapshots", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 1,
       });
 

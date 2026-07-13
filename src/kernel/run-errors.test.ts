@@ -28,6 +28,7 @@ describe("failRunWithError", () => {
         errorJson: null,
         heartbeatAtMs: null,
         runtimeOwnerId: null,
+        launchAuthorityJson: null,
         createdAtMs: 1,
       });
       store.insertAgentWorkspace({
