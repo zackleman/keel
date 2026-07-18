@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Changed
+- The web console run-detail overview now renders a live checkpoint feed and a
+  state inspector panel. The checkpoint feed lists `ctx.checkpoint` progress
+  frames in order with pretty-printed data; the state inspector shows the folded
+  `ctx.state` values per namespace (the same last-write-wins view as `get_state`).
+  Both derive from the existing run projection/event stream, live-update over SSE,
+  and stay hidden when the run has no checkpoints or state writes.
 - Added submitter credentials with named launch-authority ceilings, launch-time over-ask
   rejection, run-scoped approval grants through MCP, review-gated immutable workflow
   promotion, opt-in seven-day one-off archive retention, schema v24, and the remote

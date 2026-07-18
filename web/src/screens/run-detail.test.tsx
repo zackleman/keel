@@ -328,6 +328,131 @@ describe("RunDetailScreen", () => {
     expect(screen.queryByText("__default")).not.toBeInTheDocument();
     expect(screen.getByText("fake-app-change")).toBeInTheDocument();
   });
+
+  test("hides the checkpoint and state panels when the run has neither", async () => {
+    const client = {
+      getRun: vi.fn(async () => detail()),
+      watchRunEvents: vi.fn(),
+    } as unknown as KeelWebClient;
+
+    render(<RunDetailScreen client={client} runId="run_1" refreshKey={0} />);
+
+    await screen.findByText("cursor 5");
+    expect(screen.queryByRole("heading", { name: "Checkpoints" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "State" })).not.toBeInTheDocument();
+  });
+
+  test("renders checkpoint frames in stream order with message and data", async () => {
+    const client = {
+      getRun: vi.fn(async () => ({
+        ...detail(),
+        events: [
+          durable(2, "checkpoint", { stableKey: "cp.a", attempt: 1, message: "first", data: null }),
+          durable(4, "checkpoint", {
+            stableKey: "cp.b",
+            attempt: 1,
+            message: "second",
+            data: { iteration: 2 },
+          }),
+        ],
+      })),
+      watchRunEvents: vi.fn(),
+    } as unknown as KeelWebClient;
+
+    render(<RunDetailScreen client={client} runId="run_1" refreshKey={0} />);
+
+    const first = await screen.findByText("first");
+    const second = screen.getByText("second");
+    expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText(/"iteration": 2/)).toBeInTheDocument();
+  });
+
+  test("appends live checkpoint frames through the event stream", async () => {
+    const watched: WatchRunEventsOptions[] = [];
+    const client = {
+      getRun: vi.fn(async () => detail()),
+      watchRunEvents: vi.fn((_runId: string, opts: WatchRunEventsOptions) => {
+        watched.push(opts);
+        return vi.fn();
+      }),
+    } as unknown as KeelWebClient;
+
+    render(<RunDetailScreen client={client} runId="run_1" refreshKey={0} />);
+    await screen.findByText("cursor 5");
+    fireEvent.click(screen.getByRole("button", { name: "Watch live" }));
+    await waitFor(() => expect(client.watchRunEvents).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      watched[0]?.onFrame({
+        event: "event",
+        data: durable(6, "checkpoint", {
+          stableKey: "cp.live",
+          attempt: 1,
+          message: "streamed progress",
+          data: null,
+        }),
+        raw: "event: event",
+      });
+    });
+
+    expect(await screen.findByText("streamed progress")).toBeInTheDocument();
+  });
+
+  test("shows the folded state snapshot grouped by namespace and name", async () => {
+    const client = {
+      getRun: vi.fn(async () => ({
+        ...detail(),
+        run: {
+          ...detail().run,
+          state: {
+            research: { count: 3, history: [1, 2, 3] },
+            auxiliary: { count: 99 },
+          },
+        },
+      })),
+      watchRunEvents: vi.fn(),
+    } as unknown as KeelWebClient;
+
+    render(<RunDetailScreen client={client} runId="run_1" refreshKey={0} />);
+
+    await screen.findByRole("heading", { name: "State" });
+    expect(screen.getByText("research")).toBeInTheDocument();
+    expect(screen.getByText("auxiliary")).toBeInTheDocument();
+    expect(screen.getByText("history")).toBeInTheDocument();
+    expect(screen.getByText("99")).toBeInTheDocument();
+  });
+
+  test("reloads the folded state snapshot when a live state write completes", async () => {
+    let count = 111;
+    const watched: WatchRunEventsOptions[] = [];
+    const client = {
+      getRun: vi.fn(async () => ({
+        ...detail(),
+        run: { ...detail().run, state: { research: { count } } },
+      })),
+      watchRunEvents: vi.fn((_runId: string, opts: WatchRunEventsOptions) => {
+        watched.push(opts);
+        return vi.fn();
+      }),
+    } as unknown as KeelWebClient;
+
+    render(<RunDetailScreen client={client} runId="run_1" refreshKey={0} />);
+    await screen.findByText("111");
+    fireEvent.click(screen.getByRole("button", { name: "Watch live" }));
+    await waitFor(() => expect(client.watchRunEvents).toHaveBeenCalledTimes(1));
+
+    count = 222;
+    act(() => {
+      watched[0]?.onFrame({
+        event: "event",
+        data: durable(6, "step.completed", { stableKey: "state.count", effectType: "state_write" }),
+        raw: "event: event",
+      });
+    });
+
+    await waitFor(() => expect(client.getRun).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("222")).toBeInTheDocument();
+  });
 });
 
 function detail(seq = 5): RunDetailResponse {

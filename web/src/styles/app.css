@@ -1943,6 +1943,119 @@ h3 {
   font-size: 12px;
 }
 
+.checkpoint-feed {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.checkpoint-item {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  padding: 9px 0;
+  position: relative;
+}
+
+.checkpoint-item:not(:last-child)::after {
+  background: var(--border-strong);
+  bottom: -9px;
+  content: "";
+  left: 5px;
+  position: absolute;
+  top: 22px;
+  width: 1px;
+}
+
+.checkpoint-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.checkpoint-main {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.checkpoint-message {
+  font-weight: 600;
+}
+
+.checkpoint-meta {
+  align-items: center;
+  color: var(--text-2);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 8px;
+}
+
+.checkpoint-data {
+  margin: 2px 0 0;
+}
+
+.checkpoint-data-details > summary {
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+}
+
+.state-inspector {
+  display: grid;
+  gap: 14px;
+}
+
+.state-namespace {
+  display: grid;
+  gap: 8px;
+}
+
+.state-namespace-name {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.state-entries {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.state-entry {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: minmax(120px, 200px) minmax(0, 1fr);
+}
+
+.state-entry > dt {
+  color: var(--text);
+  font-weight: 600;
+  padding-top: 4px;
+}
+
+.state-entry > dd {
+  margin: 0;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .state-entry {
+    grid-template-columns: 1fr;
+  }
+}
+
 .event-list {
   background: var(--surface);
   border: 1px solid var(--border);

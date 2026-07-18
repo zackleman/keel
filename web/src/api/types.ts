@@ -29,6 +29,7 @@ export type {
   RunProjection,
   RunReport,
   RunStart,
+  RunStateSnapshot,
   RunStats,
   RunStatus,
   RunSummary,

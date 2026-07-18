@@ -9,6 +9,7 @@ import type {
   RunDetailResponse,
   RunStatus,
 } from "../api/types";
+import { CheckpointFeed, checkpointFrames } from "../components/checkpoint-feed";
 import { CodeViewer } from "../components/code-viewer";
 import {
   Button,
@@ -29,6 +30,7 @@ import {
 import { type Column, DenseTable } from "../components/dense-table";
 import { NodeTimeline, RunGraph } from "../components/graph";
 import { RunActions } from "../components/run-actions";
+import { StateInspector, hasStateWrites } from "../components/state-inspector";
 import { type RawEventFrame, RawEventList, Transcript } from "../components/transcript";
 import { WorkflowFlow } from "../components/workflow-flow";
 import { useAsync } from "../hooks/use-async";
@@ -278,7 +280,9 @@ function renderTab(
     );
   }
   switch (tab) {
-    case "overview":
+    case "overview": {
+      const cpFrames = checkpointFrames(events);
+      const showState = hasStateWrites(detail.run.state);
       return (
         <div className="overview-grid">
           <section className="panel panel-wide">
@@ -316,6 +320,24 @@ function renderTab(
               ]}
             />
           </section>
+          {cpFrames.length > 0 ? (
+            <section className="panel panel-wide">
+              <div className="panel-heading">
+                <h2>Checkpoints</h2>
+                <StatusPill tone="neutral">{cpFrames.length} frames</StatusPill>
+              </div>
+              <CheckpointFeed frames={cpFrames} />
+            </section>
+          ) : null}
+          {showState ? (
+            <section className="panel panel-wide">
+              <div className="panel-heading">
+                <h2>State</h2>
+                <span className="muted">Latest value per namespace</span>
+              </div>
+              <StateInspector state={detail.run.state} />
+            </section>
+          ) : null}
           <section className="panel">
             <div className="panel-heading">
               <h2>Recent Transcript</h2>
@@ -327,6 +349,7 @@ function renderTab(
           </section>
         </div>
       );
+    }
     case "flow":
       return detail.flow ? (
         <WorkflowFlow
@@ -905,6 +928,7 @@ function shouldReloadProjection(frame: SseMessage): boolean {
     return false;
   }
   const type = "type" in data ? data.type : null;
+  if (type === "step.completed") return isStateWriteCompletion(data);
   if (type === "run.parked") return !isHumanParkFrame(data);
   return (
     type === "run.finished" ||
@@ -920,5 +944,19 @@ function isHumanParkFrame(data: unknown): boolean {
   const payload = data.payload;
   return Boolean(
     payload && typeof payload === "object" && "kind" in payload && payload.kind === "human",
+  );
+}
+
+// A completed ctx.state write refreshes the folded run.state snapshot the State
+// panel renders, so a live state_write step reloads the projection. Other
+// step.completed frames (steps, checkpoints, agents) leave run.state unchanged.
+function isStateWriteCompletion(data: unknown): boolean {
+  if (!data || typeof data !== "object" || !("payload" in data)) return false;
+  const payload = (data as { payload: unknown }).payload;
+  return Boolean(
+    payload &&
+      typeof payload === "object" &&
+      "effectType" in payload &&
+      (payload as { effectType: unknown }).effectType === "state_write",
   );
 }
