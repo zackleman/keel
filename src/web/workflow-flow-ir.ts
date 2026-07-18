@@ -59,6 +59,11 @@ export type OperationKind =
   | "sleep"
   | "human"
   | "signal"
+  | "checkpoint"
+  | "drainSignals"
+  | "stateSet"
+  | "spawn"
+  | "waitRun"
   | "return";
 
 export interface WorkflowOperation {
@@ -77,6 +82,16 @@ export interface WorkflowOperation {
   status?: ExprSummary;
   result?: ExprSummary;
   condition?: ExprSummary;
+  /** ctx.checkpoint message text. */
+  message?: ExprSummary;
+  /** ctx.drainSignals signal name (second argument). */
+  signalName?: ExprSummary;
+  /** ctx.state(namespace) handle namespace for a `.set` write. */
+  namespace?: ExprSummary;
+  /** ctx.state(...).set({ name }) state field name. */
+  stateName?: ExprSummary;
+  /** ctx.spawn saved-workflow reference. */
+  workflowRef?: ExprSummary;
   sessionRef?: string;
   containers: string[];
   parallelLane?: number;

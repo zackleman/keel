@@ -409,11 +409,28 @@ function phaseState(
   return "not-started";
 }
 
+function summaryText(expr?: { value?: unknown; text?: string }): string | undefined {
+  return (typeof expr?.value === "string" ? expr.value : undefined) ?? expr?.text ?? undefined;
+}
+
 function opLabel(op: WorkflowFlowOperation): string {
   if (op.kind === "return") return "return";
-  const expr = op.title ?? op.key;
-  const text = (typeof expr?.value === "string" ? expr.value : undefined) ?? expr?.text ?? op.kind;
-  return text;
+  if (op.kind === "checkpoint") {
+    return summaryText(op.message) ?? summaryText(op.key) ?? "checkpoint";
+  }
+  if (op.kind === "drainSignals") {
+    return summaryText(op.signalName) ?? summaryText(op.key) ?? "drainSignals";
+  }
+  if (op.kind === "stateSet") {
+    const ns = summaryText(op.namespace);
+    const name = summaryText(op.stateName);
+    if (ns && name) return `${ns}.${name}`;
+    return name ?? ns ?? summaryText(op.key) ?? "stateSet";
+  }
+  if (op.kind === "spawn") {
+    return summaryText(op.workflowRef) ?? summaryText(op.key) ?? "spawn";
+  }
+  return summaryText(op.title ?? op.key) ?? op.kind;
 }
 
 function opMeta(op: WorkflowFlowOperation, count: number): string {

@@ -1,7 +1,10 @@
 import {
   Bot,
   Box,
+  Database,
   Flag,
+  GitFork,
+  Inbox,
   LogOut,
   type LucideIcon,
   MessageSquare,
@@ -27,6 +30,11 @@ const OP_ICON: Record<string, LucideIcon> = {
   sleep: Timer,
   human: UserCheck,
   signal: Radio,
+  checkpoint: Flag,
+  drainSignals: Inbox,
+  stateSet: Database,
+  spawn: GitFork,
+  waitRun: Timer,
   return: LogOut,
 };
 
@@ -270,6 +278,11 @@ function FlowDetail({ node }: { node: FlowNode }) {
   add("Reasoning", op.reasoning);
   add("Target", op.target);
   add("Condition", op.condition);
+  add("Message", op.message);
+  add("Namespace", op.namespace);
+  add("State", op.stateName);
+  add("Signal", op.signalName);
+  add("Workflow", op.workflowRef);
   add("Prompt", op.prompt);
 
   return (

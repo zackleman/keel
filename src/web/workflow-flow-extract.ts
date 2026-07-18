@@ -11,7 +11,19 @@ import type {
   WorkflowOperation,
 } from "./workflow-flow-ir.ts";
 
-const CTX_METHODS = new Set(["phase", "step", "agent", "agentSession", "sleep", "human", "signal"]);
+const CTX_METHODS = new Set([
+  "phase",
+  "step",
+  "agent",
+  "agentSession",
+  "sleep",
+  "human",
+  "signal",
+  "checkpoint",
+  "drainSignals",
+  "spawn",
+  "waitRun",
+]);
 const AGENT_SPEC_FIELDS = [
   "key",
   "prompt",
@@ -38,6 +50,9 @@ export function parseWorkflowSource(sourceFile: string, source: string): Workflo
   const diagnostics: Diagnostic[] = [];
   const operations: WorkflowOperation[] = [];
   const sessionVars = new Map<string, string>();
+  // ctx.state(namespace) returns a pure handle; track the handle variable so its
+  // `.set(...)` writes can be emitted as durable stateSet ops (mirrors sessionVars).
+  const stateVars = new Map<string, ExprSummary>();
   const typeAliases = collectTypeAliases(sf);
   const entryNode = findEntryFunctionNode(sf);
   const { usages: inputUsages, defaults: inputDefaults } = collectInputMetadata(sf, entryNode);
@@ -67,7 +82,7 @@ export function parseWorkflowSource(sourceFile: string, source: string): Workflo
         id,
         kind: "return",
         ...readReturnStatement(sf, node),
-        ...operationContext(node),
+        ...operationContext(sf, node),
         location: loc(sf, node),
       });
       return;
@@ -80,10 +95,16 @@ export function parseWorkflowSource(sourceFile: string, source: string): Workflo
         id,
         kind: "agentSession",
         ...sessionDecl.spec,
-        ...operationContext(node),
+        ...operationContext(sf, node),
         location: loc(sf, sessionDecl.call),
       });
       sessionVars.set(sessionDecl.name, id);
+      return;
+    }
+
+    const stateDecl = readStateNamespaceDeclaration(sf, node);
+    if (stateDecl) {
+      stateVars.set(stateDecl.name, stateDecl.namespace);
       return;
     }
     if (ts.isCallExpression(node)) {
@@ -93,7 +114,7 @@ export function parseWorkflowSource(sourceFile: string, source: string): Workflo
         operations.push({
           id,
           ...ctxCall,
-          ...operationContext(node),
+          ...operationContext(sf, node),
           location: loc(sf, node),
         });
       } else {
@@ -105,9 +126,21 @@ export function parseWorkflowSource(sourceFile: string, source: string): Workflo
             kind: "agentTurn",
             ...turn.spec,
             sessionRef: turn.sessionRef,
-            ...operationContext(node),
+            ...operationContext(sf, node),
             location: loc(sf, node),
           });
+        } else {
+          const stateSet = readStateSetCall(sf, node, stateVars);
+          if (stateSet) {
+            const id = nextId("state");
+            operations.push({
+              id,
+              kind: "stateSet",
+              ...stateSet,
+              ...operationContext(sf, node),
+              location: loc(sf, node),
+            });
+          }
         }
       }
     }
@@ -399,6 +432,26 @@ function readCtxCall(
   if (access.name === "signal") {
     return { kind: "signal", key: summarizeExpr(sf, node.arguments[0]) };
   }
+  if (access.name === "checkpoint") {
+    return { kind: "checkpoint", ...readCheckpointSpec(sf, node.arguments[0]) };
+  }
+  if (access.name === "drainSignals") {
+    return {
+      kind: "drainSignals",
+      key: summarizeExpr(sf, node.arguments[0]),
+      signalName: summarizeExpr(sf, node.arguments[1]),
+    };
+  }
+  if (access.name === "spawn") {
+    return {
+      kind: "spawn",
+      key: summarizeExpr(sf, node.arguments[0]),
+      ...readSpawnSpec(sf, node.arguments[1]),
+    };
+  }
+  if (access.name === "waitRun") {
+    return { kind: "waitRun", key: summarizeExpr(sf, node.arguments[0]) };
+  }
   return null;
 }
 
@@ -412,6 +465,71 @@ function readAgentTurnCall(
   const sessionRef = sessionVars.get(access.owner);
   if (!sessionRef) return null;
   return { sessionRef, spec: readSpecObject(sf, node.arguments[0]) };
+}
+
+/** ctx.checkpoint({ key, message }) — pull the durable key and the human message. */
+function readCheckpointSpec(
+  sf: ts.SourceFile,
+  node: ts.Node | undefined,
+): Partial<WorkflowOperation> {
+  const out: Partial<WorkflowOperation> = {};
+  const object = node ? unwrapParens(node) : undefined;
+  if (object && ts.isObjectLiteralExpression(object)) {
+    const key = objectProperty(object, "key");
+    const message = objectProperty(object, "message");
+    if (key) out.key = summarizeExpr(sf, key);
+    if (message) out.message = summarizeExpr(sf, message);
+  }
+  return out;
+}
+
+/** ctx.spawn(key, { workflow }) — capture the saved-workflow reference. */
+function readSpawnSpec(sf: ts.SourceFile, node: ts.Node | undefined): Partial<WorkflowOperation> {
+  const out: Partial<WorkflowOperation> = {};
+  const object = node ? unwrapParens(node) : undefined;
+  if (object && ts.isObjectLiteralExpression(object)) {
+    const workflow = objectProperty(object, "workflow");
+    if (workflow) out.workflowRef = summarizeExpr(sf, workflow);
+  }
+  return out;
+}
+
+/** `const ns = ctx.state("namespace")` declares a pure namespace handle; record
+ *  the variable so later `ns.set(...)` writes resolve to their namespace. */
+function readStateNamespaceDeclaration(
+  sf: ts.SourceFile,
+  node: ts.Node,
+): { name: string; namespace: ExprSummary } | null {
+  if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer) {
+    return null;
+  }
+  const call = unwrapParens(node.initializer);
+  if (!ts.isCallExpression(call)) return null;
+  const access = propertyAccess(call.expression);
+  if (!access || access.owner !== "ctx" || access.name !== "state") return null;
+  return { name: node.name.text, namespace: summarizeExpr(sf, call.arguments[0]) };
+}
+
+/** `ns.set({ key, name, value })` on a tracked state handle is a durable write;
+ *  `.get`/`.snapshot` are pure and intentionally produce no nodes. */
+function readStateSetCall(
+  sf: ts.SourceFile,
+  node: ts.CallExpression,
+  stateVars: Map<string, ExprSummary>,
+): Partial<WorkflowOperation> | null {
+  const access = propertyAccess(node.expression);
+  if (!access || access.name !== "set") return null;
+  const namespace = stateVars.get(access.owner);
+  if (!namespace) return null;
+  const out: Partial<WorkflowOperation> = { namespace };
+  const object = node.arguments[0] ? unwrapParens(node.arguments[0]) : undefined;
+  if (object && ts.isObjectLiteralExpression(object)) {
+    const key = objectProperty(object, "key");
+    const name = objectProperty(object, "name");
+    if (key) out.key = summarizeExpr(sf, key);
+    if (name) out.stateName = summarizeExpr(sf, name);
+  }
+  return out;
 }
 
 function readReturnStatement(
@@ -542,11 +660,15 @@ function containersFor(node: ts.Node): string[] {
 }
 
 function operationContext(
+  sf: ts.SourceFile,
   node: ts.Node,
-): Pick<WorkflowOperation, "containers"> & Pick<Partial<WorkflowOperation>, "parallelLane"> {
+): Pick<WorkflowOperation, "containers"> &
+  Pick<Partial<WorkflowOperation>, "parallelLane" | "condition"> {
   const containers = containersFor(node);
   const parallelLane = containers.includes("parallel") ? parallelLaneFor(node) : undefined;
-  return parallelLane === undefined ? { containers } : { containers, parallelLane };
+  const condition = nearestCondition(sf, node);
+  const base = parallelLane === undefined ? { containers } : { containers, parallelLane };
+  return condition ? { ...base, condition } : base;
 }
 
 function parallelLaneFor(node: ts.Node): number | undefined {

@@ -139,6 +139,52 @@ describe("layoutFlow", () => {
   });
 });
 
+function stateNode(stableKey: string): NodeView {
+  return {
+    stableKey,
+    effectType: "state_write",
+    status: "completed",
+    attempt: 1,
+    startedAtMs: 10,
+    dependsOn: [],
+    artifactBacked: false,
+    checkpoint: null,
+  };
+}
+
+describe("layoutFlow new ctx ops", () => {
+  test("aggregates runtime nodes for a stateSet op via stepKey prefix matching", () => {
+    const flow: WorkflowFlowView = {
+      entry: { name: null, async: true, params: [] },
+      input: null,
+      diagnostics: [],
+      operations: [
+        {
+          id: "state_1",
+          kind: "stateSet",
+          key: { kind: "literal", text: '"counter"', static: true, value: "counter" },
+          namespace: { kind: "literal", text: '"counters"', static: true, value: "counters" },
+          stateName: { kind: "literal", text: '"processed"', static: true, value: "processed" },
+          containers: ["loop"],
+        },
+      ],
+    };
+    // Fan-out writes journal one node per iteration under a shared prefix.
+    const nodes: NodeView[] = [stateNode("counter:a"), stateNode("counter:b")];
+
+    const layout = layoutFlow(flow, { nodes, phase: null, finished: false });
+    const node = layout.nodes.find((candidate) => candidate.id === "state_1");
+
+    expect(node).toMatchObject({
+      matched: true,
+      count: 2,
+      state: "completed",
+      tone: "success",
+      label: "counters.processed",
+    });
+  });
+});
+
 function phase(title: string): WorkflowFlowOperation {
   return {
     id: `phase-${title.replaceAll(" ", "-")}`,

@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Changed
+- The web console run-detail Flow tab now recognizes the newer workflow
+  primitives — `ctx.checkpoint`, `ctx.drainSignals`, `ctx.state(...).set`,
+  `ctx.spawn`, and `ctx.waitRun` — in the static workflow graph. They render with
+  their own icons and summarized labels (checkpoint message, `namespace.name`
+  state writes, drained signal name, spawned workflow ref), honor loop/branch
+  badges and branch conditions, and bind to their journal effects for live
+  status and per-key runtime counts.
 - The web console run-detail overview now renders a live checkpoint feed and a
   state inspector panel. The checkpoint feed lists `ctx.checkpoint` progress
   frames in order with pretty-printed data; the state inspector shows the folded

@@ -139,6 +139,11 @@ export type WorkflowOperationKind =
   | "sleep"
   | "human"
   | "signal"
+  | "checkpoint"
+  | "drainSignals"
+  | "stateSet"
+  | "spawn"
+  | "waitRun"
   | "return";
 
 export interface WorkflowExprSummary {
@@ -163,6 +168,11 @@ export interface WorkflowFlowOperation {
   status?: WorkflowExprSummary;
   result?: WorkflowExprSummary;
   condition?: WorkflowExprSummary;
+  message?: WorkflowExprSummary;
+  signalName?: WorkflowExprSummary;
+  namespace?: WorkflowExprSummary;
+  stateName?: WorkflowExprSummary;
+  workflowRef?: WorkflowExprSummary;
   sessionRef?: string;
   containers: string[];
   parallelLane?: number;

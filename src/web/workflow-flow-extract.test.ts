@@ -54,6 +54,67 @@ describe("workflow flow extraction", () => {
     ]);
   });
 
+  test("captures the new ctx primitives inside a loop + branch with condition", () => {
+    const source = `
+      export default async function workflow(ctx, input: { items: string[] }) {
+        const counters = ctx.state("counters");
+        for (const item of input.items) {
+          if (item) {
+            await ctx.checkpoint({ key: "cp", message: "processing item" });
+            await ctx.drainSignals("drain", "review");
+            await counters.set({ key: "count", name: "processed", value: 1 });
+            const child = await ctx.spawn("spawn", { workflow: "child@1", input: {} });
+            await ctx.waitRun("wait", child);
+          }
+        }
+      }
+    `;
+
+    const ir = parseWorkflowSource("ops.workflow.ts", source);
+    const ops = ir.operations;
+
+    expect(ops.map((op) => op.kind)).toEqual([
+      "checkpoint",
+      "drainSignals",
+      "stateSet",
+      "spawn",
+      "waitRun",
+    ]);
+    // Every emitted op sees the enclosing loop + branch containers and the
+    // branch condition, so loop/branch badges and condition labels work.
+    for (const op of ops) {
+      expect(op.containers).toEqual(["loop", "branch"]);
+      expect(op.condition?.text).toBe("item");
+    }
+
+    const byKind = new Map(ops.map((op) => [op.kind, op]));
+    expect(byKind.get("checkpoint")?.key?.value).toBe("cp");
+    expect(byKind.get("checkpoint")?.message?.value).toBe("processing item");
+    expect(byKind.get("drainSignals")?.key?.value).toBe("drain");
+    expect(byKind.get("drainSignals")?.signalName?.value).toBe("review");
+    expect(byKind.get("stateSet")?.key?.value).toBe("count");
+    expect(byKind.get("stateSet")?.namespace?.value).toBe("counters");
+    expect(byKind.get("stateSet")?.stateName?.value).toBe("processed");
+    expect(byKind.get("spawn")?.key?.value).toBe("spawn");
+    expect(byKind.get("spawn")?.workflowRef?.value).toBe("child@1");
+    expect(byKind.get("waitRun")?.key?.value).toBe("wait");
+  });
+
+  test("does not emit nodes for pure state reads", () => {
+    const source = `
+      export default async function workflow(ctx) {
+        const counters = ctx.state("counters");
+        const current = counters.get("processed");
+        const all = counters.snapshot();
+        await counters.set({ key: "count", name: "processed", value: current ?? 0 });
+      }
+    `;
+
+    const ir = parseWorkflowSource("state-reads.workflow.ts", source);
+
+    expect(ir.operations.map((op) => op.kind)).toEqual(["stateSet"]);
+  });
+
   test("leaves dynamic Promise.all fan-outs without lane metadata", () => {
     const source = `
       export default async function workflow(ctx) {
